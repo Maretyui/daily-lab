@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>002 — Magnetic Button</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem;
+  }
+
+  a.back {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  .field {
+    width: 320px;
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  button.magnetic {
+    position: relative;
+    padding: 0.9rem 2rem;
+    border-radius: 999px;
+    border: 1px solid rgba(20, 184, 166, 0.4);
+    background: rgba(20, 184, 166, 0.08);
+    color: var(--text);
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: transform 0.15s ease-out, background 0.2s ease;
+    will-change: transform;
+  }
+
+  button.magnetic:hover {
+    background: rgba(20, 184, 166, 0.18);
+  }
+
+  p.caption {
+    max-width: 320px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <div class="field" id="field">
+    <button class="magnetic" id="btn">pull me</button>
+  </div>
+
+  <p class="caption">
+    The button tracks the cursor within a padded field around it and eases
+    toward the pointer position, snapping back to center on leave. Just a
+    distance check + a CSS transform, no physics library.
+  </p>
+
+  <script>
+    const field = document.getElementById('field');
+    const btn = document.getElementById('btn');
+    const STRENGTH = 0.35;
+
+    field.addEventListener('pointermove', (e) => {
+      const rect = btn.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const dx = (e.clientX - centerX) * STRENGTH;
+      const dy = (e.clientY - centerY) * STRENGTH;
+      btn.style.transform = `translate(${dx}px, ${dy}px)`;
+    });
+
+    field.addEventListener('pointerleave', () => {
+      btn.style.transform = 'translate(0, 0)';
+    });
+  </script>
+</body>
+</html>
