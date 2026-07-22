@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>004 — Noise Grain Overlay</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem;
+  }
+
+  a.back {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  .panel {
+    position: relative;
+    width: 320px;
+    height: 200px;
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #14b8a6 0%, #0b0e14 70%);
+  }
+
+  .panel span {
+    position: relative;
+    z-index: 2;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  canvas.grain {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    opacity: 0.18;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+
+  p.caption {
+    max-width: 340px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <div class="panel">
+    <canvas class="grain" id="grain"></canvas>
+    <span>film grain overlay</span>
+  </div>
+
+  <p class="caption">
+    A small offscreen canvas is filled with random static once, then redrawn
+    at a low frame rate and composited with <code>mix-blend-mode: overlay</code>
+    to fake analog film grain over any background, no image asset needed.
+  </p>
+
+  <script>
+    const canvas = document.getElementById('grain');
+    const ctx = canvas.getContext('2d');
+    const SIZE = 64;
+    const FPS = 12;
+
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+
+    function drawNoise() {
+      const imageData = ctx.createImageData(SIZE, SIZE);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const shade = Math.floor(Math.random() * 255);
+        data[i] = shade;
+        data[i + 1] = shade;
+        data[i + 2] = shade;
+        data[i + 3] = 255;
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    setInterval(drawNoise, 1000 / FPS);
+    drawNoise();
+  </script>
+</body>
+</html>
