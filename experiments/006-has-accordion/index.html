@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>006 — :has() Accordion</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem;
+  }
+
+  a.back {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  .accordion {
+    width: min(90vw, 420px);
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card);
+  }
+
+  .item {
+    border-bottom: 1px solid #1f2530;
+  }
+  .item:last-child {
+    border-bottom: none;
+  }
+
+  .item input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .item label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    font-weight: 600;
+    user-select: none;
+  }
+
+  .item label::after {
+    content: '+';
+    color: var(--accent);
+    font-size: 1.2rem;
+    transition: transform 0.2s ease;
+  }
+
+  .item .panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.25s ease;
+  }
+
+  .item .panel > div {
+    overflow: hidden;
+  }
+
+  .item .panel p {
+    margin: 0;
+    padding: 0 1.25rem 1rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  /* the whole thing: no JS, just :has() reacting to the checkbox state */
+  .item:has(input:checked) label::after {
+    content: '−';
+  }
+
+  .item:has(input:checked) .panel {
+    grid-template-rows: 1fr;
+  }
+
+  p.caption {
+    max-width: 420px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <div class="accordion">
+    <div class="item">
+      <input type="checkbox" id="q1">
+      <label for="q1">What browsers support this?</label>
+      <div class="panel"><div><p>
+        Every evergreen browser as of 2023 — Chrome, Edge, Safari, and
+        Firefox 121+ all support <code>:has()</code>.
+      </p></div></div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="q2">
+      <label for="q2">How does the animation work with no fixed height?</label>
+      <div class="panel"><div><p>
+        <code>grid-template-rows</code> animates from <code>0fr</code>
+        to <code>1fr</code>. Grid's <code>fr</code> unit can be
+        transitioned and doesn't require knowing the content's
+        height ahead of time, unlike animating <code>max-height</code>.
+      </p></div></div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="q3">
+      <label for="q3">Why a checkbox instead of &lt;details&gt;?</label>
+      <div class="panel"><div><p>
+        <code>&lt;details&gt;</code> works great too, but its open/close
+        transition support is newer and less consistent. A checkbox +
+        <code>:has()</code> gives full control over the closed→open
+        animation with plain CSS.
+      </p></div></div>
+    </div>
+  </div>
+
+  <p class="caption">
+    Zero JavaScript. Each row is a hidden checkbox + label; the parent
+    <code>.item:has(input:checked)</code> selector reaches "up" from the
+    checkbox to react on its own container — the trick that made
+    CSS-only tabs/accordions/dropdowns finally practical.
+  </p>
+</body>
+</html>
