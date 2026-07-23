@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>005 — Scroll Draw</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: rgba(11, 14, 20, 0.85);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid #1f2530;
+    z-index: 2;
+  }
+
+  a.back {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 8rem;
+  }
+
+  p.caption {
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin-bottom: 3rem;
+  }
+
+  .spacer {
+    height: 40vh;
+  }
+
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .draw-path {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .draw-block {
+    margin-bottom: 30vh;
+  }
+
+  .draw-block h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 0 0 1.5rem;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <a class="back" href="../../index.html">&larr; daily-lab</a>
+    <span style="color: var(--muted); font-size: 0.85rem;">scroll down</span>
+  </header>
+
+  <main>
+    <p class="caption">
+      Each SVG path's <code>stroke-dasharray</code> is set to its own
+      length via <code>getTotalLength()</code>, then <code>stroke-dashoffset</code>
+      is driven by how far the shape has scrolled through the viewport —
+      no animation library, just one <code>IntersectionObserver</code> +
+      a scroll listener per visible shape.
+    </p>
+
+    <div class="spacer"></div>
+
+    <div class="draw-block">
+      <h2>01 — checkmark</h2>
+      <svg viewBox="0 0 200 100">
+        <path class="draw-path" data-draw d="M20 55 L80 90 L180 15" />
+      </svg>
+    </div>
+
+    <div class="draw-block">
+      <h2>02 — signature squiggle</h2>
+      <svg viewBox="0 0 300 100">
+        <path class="draw-path" data-draw d="M10 60 C 40 10, 70 10, 90 60 S 140 110, 160 60 S 210 10, 230 60 S 280 90, 290 50" />
+      </svg>
+    </div>
+
+    <div class="draw-block">
+      <h2>03 — star outline</h2>
+      <svg viewBox="0 0 200 190">
+        <path class="draw-path" data-draw d="M100 5 L123 70 L193 70 L137 110 L158 175 L100 135 L42 175 L63 110 L7 70 L77 70 Z" />
+      </svg>
+    </div>
+  </main>
+
+  <script>
+    const paths = document.querySelectorAll('[data-draw]');
+
+    paths.forEach((path) => {
+      const length = path.getTotalLength();
+      path.style.strokeDasharray = length;
+      path.style.strokeDashoffset = length;
+    });
+
+    function updatePath(path) {
+      const length = path.getTotalLength();
+      const rect = path.getBoundingClientRect();
+      const viewportH = window.innerHeight;
+
+      // progress: 0 when shape's top just enters the bottom of the
+      // viewport, 1 once its bottom has scrolled up to a third of
+      // the viewport height.
+      const start = viewportH;
+      const end = viewportH * 0.35;
+      const progress = (start - rect.top) / (start - end);
+      const clamped = Math.min(1, Math.max(0, progress));
+
+      path.style.strokeDashoffset = length * (1 - clamped);
+    }
+
+    function onScroll() {
+      paths.forEach(updatePath);
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    onScroll();
+  </script>
+</body>
+</html>
