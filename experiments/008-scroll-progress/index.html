@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>008 — CSS Scroll Progress Bar</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 6px;
+    width: 100%;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    z-index: 10;
+    animation: grow-progress auto linear;
+    animation-timeline: scroll(root);
+  }
+
+  @keyframes grow-progress {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 10;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+  <div class="progress"></div>
+
+  <main>
+    <h1>Zero-JS scroll progress bar</h1>
+    <p class="support-note">
+      The teal bar at the very top is a plain <code>&lt;div&gt;</code>.
+      There is no scroll event listener anywhere on this page — its width
+      is driven entirely by <code>animation-timeline: scroll(root)</code>,
+      which ties a regular CSS <code>@keyframes</code> animation's progress
+      to how far the document has been scrolled instead of to time.
+      Scroll down to watch it fill.
+    </p>
+    <p>
+      Before scroll-driven animations, this exact effect needed a
+      <code>scroll</code> listener, a rAF loop, and manual
+      <code>scrollY / (scrollHeight - clientHeight)</code> math — recomputed
+      on every frame. Here the browser's compositor drives it directly, so
+      it stays smooth even during heavy main-thread work.
+    </p>
+    <p>
+      Support is landed in Chromium (115+) and Firefox (114+, behind the
+      default now) as of late 2024; Safari is still catching up. On an
+      unsupported browser the bar simply stays static at 0 width — no
+      layout breakage, just a missing enhancement.
+    </p>
+    <p>Keep scrolling…</p>
+    <p>…the bar tracks document scroll position, not viewport time.</p>
+    <p>…almost at the bottom now.</p>
+    <p>…and that's the whole experiment. One div, one animation, zero JavaScript.</p>
+  </main>
+</body>
+</html>
