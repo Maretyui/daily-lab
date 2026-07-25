@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>010 — Zero-JS Tooltip via CSS Anchor Positioning</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .stage {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    padding: 3rem 0;
+  }
+
+  .anchor-btn {
+    font: inherit;
+    background: var(--accent);
+    color: #04211d;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    anchor-name: --tip-anchor;
+  }
+
+  .tooltip {
+    position: fixed;
+    position-anchor: --tip-anchor;
+    position-area: top;
+    margin-bottom: 0.5rem;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--text);
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  .anchor-btn:hover + .tooltip,
+  .anchor-btn:focus-visible + .tooltip {
+    opacity: 1;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Zero-JS tooltip via CSS anchor positioning</h1>
+    <p class="support-note">
+      Hover the button below. The tooltip that appears above it is tethered
+      with pure CSS — no <code>getBoundingClientRect()</code>, no resize
+      listener, no library. The button declares <code>anchor-name:
+      --tip-anchor</code>; the tooltip references it with
+      <code>position-anchor</code> and <code>position-area: top</code>, and
+      the browser keeps it pinned on scroll and resize automatically.
+    </p>
+
+    <div class="stage">
+      <button class="anchor-btn" type="button">Hover me</button>
+      <div class="tooltip" role="tooltip">Anchored above, zero JS</div>
+    </div>
+
+    <p>
+      Before CSS anchor positioning, tethering a floating element to a
+      trigger meant either a positioning library (Floating UI, Popper) or
+      hand-rolled JS re-measuring both elements on every scroll/resize
+      event. Here the tooltip is just a <code>position: fixed</code>
+      element pointed at the button's <code>anchor-name</code> — the
+      browser's layout engine does the tethering math natively, so it never
+      drifts out of sync even during fast scrolling.
+    </p>
+    <p>
+      Support: Chromium 125+ only as of 2026 — Firefox and Safari haven't
+      shipped it yet. Without support the tooltip still works as a
+      <code>position: fixed</code> box, it just won't stay attached to the
+      button if the page scrolls; worth feature-detecting with
+      <code>CSS.supports("anchor-name: --x")</code> before relying on this
+      for anything load-bearing.
+    </p>
+  </main>
+</body>
+</html>
