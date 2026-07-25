@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>009 — Animated Gradient Border via @property</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  @property --angle {
+    syntax: "<angle>";
+    initial-value: 0deg;
+    inherits: false;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .stage {
+    display: flex;
+    justify-content: center;
+    padding: 2rem 0;
+  }
+
+  .glow-card {
+    --angle: 0deg;
+    width: min(80vw, 320px);
+    padding: 3px;
+    border-radius: 16px;
+    background: conic-gradient(
+      from var(--angle),
+      var(--accent),
+      #6366f1,
+      #ec4899,
+      var(--accent)
+    );
+    animation: spin 4s linear infinite;
+  }
+
+  @keyframes spin {
+    to { --angle: 360deg; }
+  }
+
+  .glow-card-inner {
+    background: var(--card);
+    border-radius: 13px;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .glow-card-inner h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.1rem;
+  }
+
+  .glow-card-inner p {
+    margin: 0;
+    font-size: 0.85rem;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Animated gradient border via <code>@property</code></h1>
+    <p class="support-note">
+      The rotating rainbow border below is a plain <code>conic-gradient()</code>
+      background on a wrapper element, sized 3px bigger than its inner card so
+      only the edge shows. What makes it spin smoothly is <code>@property</code>:
+      it registers <code>--angle</code> as a real <code>&lt;angle&gt;</code>
+      custom property instead of an untyped string, so the browser knows how
+      to interpolate it between keyframes — the gradient's <code>from</code>
+      angle animates continuously instead of jumping.
+    </p>
+
+    <div class="stage">
+      <div class="glow-card">
+        <div class="glow-card-inner">
+          <h2>@property --angle</h2>
+          <p>syntax: "&lt;angle&gt;", animates 0deg → 360deg</p>
+        </div>
+      </div>
+    </div>
+
+    <p>
+      Before <code>@property</code>, animating a custom property used in a
+      gradient just didn't work — CSS treated it as an opaque string, so
+      <code>@keyframes</code> couldn't tween it at all; you'd need a JS
+      <code>requestAnimationFrame</code> loop writing the angle every frame
+      instead. Registering the property's syntax turns it into a typed value
+      the animation engine actually understands, so this now runs entirely
+      on the compositor.
+    </p>
+    <p>
+      Support: Chromium 85+, Firefox 128+, Safari 16.4+ — solid baseline as
+      of 2026. Without support, the card just renders with a static
+      <code>0deg</code> gradient instead of spinning — no layout breakage.
+    </p>
+  </main>
+</body>
+</html>
