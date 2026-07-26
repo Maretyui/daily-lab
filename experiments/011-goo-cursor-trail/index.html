@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>011 — Goo Cursor Trail</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .stage {
+    position: relative;
+    height: 340px;
+    border-radius: 12px;
+    border: 1px solid #1f2530;
+    background: var(--card);
+    overflow: hidden;
+    cursor: none;
+    /* SVG filter turns the blurred, high-contrast blobs into a liquid merge */
+    filter: url(#goo);
+  }
+
+  .stage p.hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    filter: none;
+    pointer-events: none;
+  }
+
+  .blob-layer {
+    position: absolute;
+    inset: 0;
+  }
+
+  .blob {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 34px;
+    height: 34px;
+    margin: -17px 0 0 -17px;
+    border-radius: 50%;
+    background: var(--accent);
+    will-change: transform;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <!-- feGaussianBlur softens each circle into a fuzzy cloud, then feColorMatrix
+       sharpens the alpha channel back to solid edges. Overlapping blurred
+       circles fuse into one shape before the sharpen step re-solidifies
+       them, which is what makes them look like they're merging like liquid
+       instead of just two circles crossing paths. -->
+  <svg width="0" height="0">
+    <filter id="goo">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+      <feColorMatrix
+        in="blur"
+        mode="matrix"
+        values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9"
+        result="goo"
+      />
+      <feBlend in="SourceGraphic" in2="goo" />
+    </filter>
+  </svg>
+
+  <main>
+    <h1>Goo cursor trail</h1>
+    <p class="support-note">
+      Move the cursor over the panel below. A chain of eight dots trails
+      behind it, each one easing toward the previous dot's last position —
+      and an SVG <code>feGaussianBlur</code> + <code>feColorMatrix</code>
+      filter fuses overlapping dots into a single liquid blob instead of
+      letting them visibly overlap as separate circles.
+    </p>
+
+    <div class="stage" id="stage">
+      <p class="hint">move your cursor here</p>
+      <div class="blob-layer" id="blob-container"></div>
+    </div>
+
+    <p>
+      The trick is entirely in the filter, not the JS: each dot is a plain
+      blurred circle. <code>feGaussianBlur</code> spreads its edges into a
+      soft gradient, so once two blurred circles get close enough their
+      faint edges physically overlap in the alpha channel.
+      <code>feColorMatrix</code> then multiplies alpha by a steep factor
+      (<code>22</code>) and subtracts an offset (<code>-9</code>), which
+      clips anything below a threshold back to fully transparent and
+      anything above it back to fully opaque — collapsing the soft blur
+      into a hard edge again, but now following the merged silhouette
+      instead of each circle's original round outline.
+    </p>
+    <p>
+      The trail itself is just <code>requestAnimationFrame</code> lerping:
+      dot 0 chases the real cursor position, dot 1 chases dot 0's last
+      frame, dot 2 chases dot 1's, and so on — no physics library, no
+      external dependency, just eight numbers converging toward each other
+      every frame.
+    </p>
+  </main>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const container = document.getElementById('blob-container');
+    const DOT_COUNT = 8;
+    const EASE = 0.3;
+
+    const dots = Array.from({ length: DOT_COUNT }, () => {
+      const el = document.createElement('div');
+      el.className = 'blob';
+      container.appendChild(el);
+      return { el, x: 0, y: 0 };
+    });
+
+    let target = null;
+
+    stage.addEventListener('pointermove', (e) => {
+      const rect = stage.getBoundingClientRect();
+      target = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    });
+
+    stage.addEventListener('pointerleave', () => {
+      target = null;
+    });
+
+    function tick() {
+      if (target) {
+        let leaderX = target.x;
+        let leaderY = target.y;
+        for (const dot of dots) {
+          dot.x += (leaderX - dot.x) * EASE;
+          dot.y += (leaderY - dot.y) * EASE;
+          dot.el.style.transform = `translate(${dot.x}px, ${dot.y}px)`;
+          leaderX = dot.x;
+          leaderY = dot.y;
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
