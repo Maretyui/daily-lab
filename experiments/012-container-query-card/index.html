@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>012 — Container Query Card</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .controls button {
+    font: inherit;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .controls button:hover,
+  .controls button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* The wrapper is what gets resized, and it's what the card measures
+     itself against — establishing a containment context is the one line
+     of CSS that makes @container possible. */
+  .resizable {
+    container-type: inline-size;
+    container-name: card-frame;
+    width: 100%;
+    max-width: 560px;
+    border: 1px dashed #2a3140;
+    border-radius: 12px;
+    padding: 1rem;
+    transition: max-width 0.35s ease;
+  }
+
+  .profile-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #0b7a6e);
+    flex-shrink: 0;
+  }
+
+  .profile-card h3 {
+    margin: 0 0 0.25rem;
+    font-size: 1.05rem;
+  }
+  .profile-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  /* Below ~360px of container width, stack the avatar above the text.
+     Above it, switch to a side-by-side row. This reflow is driven purely
+     by the card's own box, never the viewport. */
+  @container card-frame (min-width: 360px) {
+    .profile-card {
+      flex-direction: row;
+      align-items: center;
+    }
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Container query card</h1>
+    <p class="support-note">
+      The same card markup below reflows from a stacked layout to a
+      side-by-side layout purely based on <em>its own container's width</em>
+      — not the viewport. Click a width preset to see it happen with no
+      JS involved in the layout decision at all.
+    </p>
+
+    <div class="controls">
+      <button type="button" data-width="220" class="active">Narrow</button>
+      <button type="button" data-width="380">Medium</button>
+      <button type="button" data-width="560">Wide</button>
+    </div>
+
+    <div class="resizable" id="resizable" style="max-width: 220px;">
+      <div class="profile-card">
+        <div class="avatar"></div>
+        <div>
+          <h3>Maretyui</h3>
+          <p>Web design &amp; swim instruction — this box reflows on its own width, at any viewport size.</p>
+        </div>
+      </div>
+    </div>
+
+    <p>
+      A media query only ever knows about the viewport, so a component
+      that needs to look different depending on how much space its
+      <em>parent</em> gives it — a sidebar widget vs. the same widget in a
+      full-width main column — traditionally needed JS (a
+      <code>ResizeObserver</code>) to fake this. <code>container-type:
+      inline-size</code> on the wrapper opts it into containment, and
+      <code>@container card-frame (min-width: 360px)</code> queries that
+      wrapper's own box directly. The card component itself has zero idea
+      what viewport it's on; it only reacts to the box it's actually
+      sitting in, which is what makes it genuinely reusable in a sidebar,
+      a modal, or a grid column without separate breakpoint logic for each
+      placement.
+    </p>
+  </main>
+
+  <script>
+    const resizable = document.getElementById('resizable');
+    document.querySelectorAll('.controls button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.controls button').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        resizable.style.maxWidth = btn.dataset.width + 'px';
+      });
+    });
+  </script>
+</body>
+</html>
