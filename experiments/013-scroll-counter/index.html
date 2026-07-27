@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>013 — Scroll-Triggered Counter</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .spacer {
+    height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    border: 1px dashed #1f2530;
+    border-radius: 12px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+
+  .stat {
+    background: var(--card);
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+    transition: border-color 0.2s ease;
+  }
+  .stat.counting,
+  .stat.done {
+    border-color: var(--accent);
+  }
+
+  .stat .value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    line-height: 1.1;
+  }
+
+  .stat .label {
+    margin-top: 0.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Scroll-triggered counter</h1>
+    <p class="support-note">
+      Each number below sits at 0 until its card actually enters the
+      viewport, then counts up on its own using <code>requestAnimationFrame</code>
+      with an <code>easeOutExpo</code> curve — fast at the start, settling
+      gently into the final value instead of a flat linear tick. Scroll
+      down to trigger it.
+    </p>
+
+    <div class="spacer">keep scrolling ↓</div>
+
+    <div class="stats" id="stats">
+      <div class="stat" data-target="7" data-suffix="">
+        <div class="value">0</div>
+        <div class="label">years of experience</div>
+      </div>
+      <div class="stat" data-target="48" data-suffix="">
+        <div class="value">0</div>
+        <div class="label">projects shipped</div>
+      </div>
+      <div class="stat" data-target="2140" data-suffix="">
+        <div class="value">0</div>
+        <div class="label">cups of coffee</div>
+      </div>
+      <div class="stat" data-target="99" data-suffix="%">
+        <div class="value">0</div>
+        <div class="label">client satisfaction</div>
+      </div>
+    </div>
+
+    <p>
+      Triggering is handled by <code>IntersectionObserver</code> watching
+      each <code>.stat</code> card — no scroll listener, no manual
+      <code>getBoundingClientRect</code> math on every frame. Once a card
+      crosses the threshold it unobserves itself, so the count only ever
+      plays once per page load, and each card's <code>requestAnimationFrame</code>
+      loop runs independently against its own start timestamp so the four
+      counters don't drift relative to each other even if they start at
+      slightly different scroll moments.
+    </p>
+    <p>
+      The easing itself is plain math, not a library:
+      <code>1 - Math.pow(2, -10 * progress)</code> for <code>easeOutExpo</code>.
+      Feeding raw scroll progress into a linear interpolation reads as
+      mechanical; running the same 0→1 progress through an easing function
+      before multiplying by the target value is what makes a UI counter
+      feel like a purposeful animation instead of a odometer stepping
+      through numbers.
+    </p>
+  </main>
+
+  <script>
+    function easeOutExpo(t) {
+      return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    }
+
+    function animateCount(el) {
+      const target = Number(el.dataset.target);
+      const suffix = el.dataset.suffix || '';
+      const valueEl = el.querySelector('.value');
+      const duration = 1600;
+      let start = null;
+
+      el.classList.add('counting');
+
+      function tick(timestamp) {
+        if (start === null) start = timestamp;
+        const elapsed = timestamp - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = easeOutExpo(progress);
+        const current = Math.round(eased * target);
+        valueEl.textContent = current + suffix;
+
+        if (progress < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          valueEl.textContent = target + suffix;
+          el.classList.remove('counting');
+          el.classList.add('done');
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          animateCount(entry.target);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.4 });
+
+    document.querySelectorAll('.stat').forEach((stat) => observer.observe(stat));
+  </script>
+</body>
+</html>
