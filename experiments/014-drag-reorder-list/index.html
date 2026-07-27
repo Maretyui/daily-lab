@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>014 — Drag Reorder List</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .reorder-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .reorder-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+    cursor: grab;
+    user-select: none;
+    transition: opacity 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .reorder-list li:active {
+    cursor: grabbing;
+  }
+
+  .reorder-list li .handle {
+    color: var(--muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    letter-spacing: 0.1em;
+  }
+
+  .reorder-list li .label {
+    flex: 1;
+  }
+
+  .reorder-list li .index {
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The item currently being dragged fades out in place so the cursor's
+     native drag ghost image reads as the "real" thing moving. */
+  .reorder-list li.dragging {
+    opacity: 0.35;
+    border-color: var(--accent);
+  }
+
+  /* Drop-target feedback: a highlighted top edge shows exactly where the
+     dragged item will land relative to the item being hovered over. */
+  .reorder-list li.drop-before {
+    box-shadow: inset 0 2px 0 0 var(--accent);
+  }
+  .reorder-list li.drop-after {
+    box-shadow: inset 0 -2px 0 0 var(--accent);
+  }
+
+  .reset-row {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .reset-row button {
+    font: inherit;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .reset-row button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Drag to reorder</h1>
+    <p class="support-note">
+      Native HTML5 drag-and-drop, no library. Grab an item by its handle
+      and drag it up or down — a teal edge highlight on the item under
+      your cursor shows exactly where it will land before you let go, and
+      the item you're dragging fades to 35% opacity in place while it
+      moves.
+    </p>
+
+    <ul class="reorder-list" id="list">
+      <li draggable="true" data-id="a"><span class="handle">⠿</span><span class="label">Sketch the layout</span><span class="index">1</span></li>
+      <li draggable="true" data-id="b"><span class="handle">⠿</span><span class="label">Wire up the markup</span><span class="index">2</span></li>
+      <li draggable="true" data-id="c"><span class="handle">⠿</span><span class="label">Style the dark theme</span><span class="index">3</span></li>
+      <li draggable="true" data-id="d"><span class="handle">⠿</span><span class="label">Add the interaction</span><span class="index">4</span></li>
+      <li draggable="true" data-id="e"><span class="handle">⠿</span><span class="label">Ship it</span><span class="index">5</span></li>
+    </ul>
+
+    <div class="reset-row">
+      <button type="button" id="reset">Reset order</button>
+    </div>
+
+    <p>
+      The mechanics are four events on each <code>&lt;li draggable="true"&gt;</code>:
+      <code>dragstart</code> records which element is moving and adds the
+      faded <code>.dragging</code> class; <code>dragover</code> (which must
+      call <code>preventDefault()</code> or the browser refuses to allow a
+      drop at all) compares the cursor's vertical position against the
+      hovered item's own midpoint to decide whether the drop indicator
+      belongs above or below it; <code>drop</code> actually moves the
+      dragged node in the DOM via <code>insertBefore</code>/
+      <code>insertAdjacentElement</code>; and <code>dragend</code> clears
+      every visual state regardless of whether the drop landed on a valid
+      target, since the browser doesn't guarantee <code>drop</code> fires
+      on a cancelled drag.
+    </p>
+  </main>
+
+  <script>
+    const list = document.getElementById('list');
+    const originalOrder = Array.from(list.children).map((li) => li.dataset.id);
+    let draggedEl = null;
+
+    function renumber() {
+      Array.from(list.children).forEach((li, i) => {
+        li.querySelector('.index').textContent = i + 1;
+      });
+    }
+
+    function clearDropMarkers() {
+      list.querySelectorAll('.drop-before, .drop-after').forEach((li) => {
+        li.classList.remove('drop-before', 'drop-after');
+      });
+    }
+
+    list.addEventListener('dragstart', (e) => {
+      draggedEl = e.target.closest('li');
+      if (!draggedEl) return;
+      draggedEl.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox requires data to actually be set for a drag to proceed.
+      e.dataTransfer.setData('text/plain', draggedEl.dataset.id);
+    });
+
+    list.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const target = e.target.closest('li');
+      if (!target || target === draggedEl) return;
+
+      const rect = target.getBoundingClientRect();
+      const isBelowMidpoint = e.clientY > rect.top + rect.height / 2;
+
+      clearDropMarkers();
+      target.classList.add(isBelowMidpoint ? 'drop-after' : 'drop-before');
+      e.dataTransfer.dropEffect = 'move';
+    });
+
+    list.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const target = e.target.closest('li');
+      clearDropMarkers();
+      if (!target || !draggedEl || target === draggedEl) return;
+
+      const rect = target.getBoundingClientRect();
+      const isBelowMidpoint = e.clientY > rect.top + rect.height / 2;
+
+      if (isBelowMidpoint) {
+        target.insertAdjacentElement('afterend', draggedEl);
+      } else {
+        target.insertAdjacentElement('beforebegin', draggedEl);
+      }
+
+      renumber();
+    });
+
+    list.addEventListener('dragend', () => {
+      if (draggedEl) draggedEl.classList.remove('dragging');
+      clearDropMarkers();
+      draggedEl = null;
+    });
+
+    document.getElementById('reset').addEventListener('click', () => {
+      originalOrder.forEach((id) => {
+        const li = list.querySelector(`li[data-id="${id}"]`);
+        list.appendChild(li);
+      });
+      renumber();
+    });
+  </script>
+</body>
+</html>
