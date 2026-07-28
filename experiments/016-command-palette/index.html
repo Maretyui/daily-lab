@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>016 — Command Palette</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .open-row {
+    display: flex;
+    justify-content: center;
+  }
+
+  .open-btn {
+    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 0.7rem 1.1rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  .open-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .open-btn kbd {
+    font: inherit;
+    font-size: 0.75rem;
+    background: #1f2530;
+    border-radius: 5px;
+    padding: 0.15rem 0.45rem;
+    color: var(--text);
+  }
+
+  /* The native <dialog> backdrop, styled via ::backdrop rather than a
+     hand-rolled overlay div — showModal() gives us focus trapping and
+     Escape-to-close for free. */
+  dialog::backdrop {
+    background: rgba(4, 6, 10, 0.6);
+    backdrop-filter: blur(2px);
+  }
+
+  dialog {
+    padding: 0;
+    border: 1px solid #1f2530;
+    border-radius: 14px;
+    background: var(--card);
+    color: var(--text);
+    width: min(480px, 90vw);
+    margin-top: 12vh;
+  }
+
+  .palette-input {
+    width: 100%;
+    font: inherit;
+    font-size: 1rem;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #1f2530;
+    color: var(--text);
+    padding: 1rem 1.25rem;
+    outline: none;
+    box-sizing: border-box;
+  }
+  .palette-input::placeholder { color: var(--muted); }
+
+  .palette-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .palette-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .palette-list li .icon {
+    color: var(--muted);
+    width: 1.2em;
+    text-align: center;
+  }
+
+  .palette-list li.active {
+    background: #1f2530;
+    color: var(--text);
+  }
+  .palette-list li.active .icon { color: var(--accent); }
+
+  .palette-empty {
+    padding: 1.5rem 1.25rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Command palette</h1>
+    <p class="support-note">
+      A ⌘K-style fuzzy command launcher built on the native
+      <code>&lt;dialog&gt;</code> element — <code>showModal()</code>
+      handles the backdrop, focus trapping, and Escape-to-close, so the
+      only custom logic left is filtering the list and moving the
+      "active" row with the arrow keys.
+    </p>
+
+    <div class="open-row">
+      <button class="open-btn" type="button" id="openBtn">
+        Open command palette <kbd id="kbdHint">Ctrl K</kbd>
+      </button>
+    </div>
+
+    <dialog id="palette">
+      <input
+        class="palette-input"
+        id="paletteInput"
+        type="text"
+        placeholder="Type a command…"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <ul class="palette-list" id="paletteList"></ul>
+    </dialog>
+
+    <p>
+      Press <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> anywhere on this
+      page, or click the button above. The command list lives as a plain
+      JS array; every keystroke re-filters it with a case-insensitive
+      substring match against each command's label, and
+      <kbd>↑</kbd>/<kbd>↓</kbd> move a highlighted "active" index that
+      wraps around at either end. <kbd>Enter</kbd> "runs" the active
+      command (here, just an alert) and closes the dialog via
+      <code>dialog.close()</code>; clicking anywhere on the
+      <code>::backdrop</code> also dismisses it for free, since that's
+      native <code>&lt;dialog&gt;</code> behavior once
+      <code>method="dialog"</code>-style light-dismiss is wired to a
+      backdrop click listener.
+    </p>
+  </main>
+
+  <script>
+    const isApple = /Mac|iPhone|iPad/.test(navigator.platform);
+    document.getElementById('kbdHint').textContent = isApple ? '⌘ K' : 'Ctrl K';
+
+    const commands = [
+      { icon: '📄', label: 'Go to daily-lab home' },
+      { icon: '🧪', label: 'Open experiment 001 — Glass Tilt Card' },
+      { icon: '🎨', label: 'Toggle theme (no-op demo)' },
+      { icon: '🔗', label: 'Copy page link' },
+      { icon: '📋', label: 'Copy this experiment\'s source' },
+      { icon: '⬆️', label: 'Scroll to top' },
+      { icon: '🌓', label: 'Reduce motion (no-op demo)' },
+      { icon: '📣', label: 'Report an issue' },
+    ];
+
+    const dialog = document.getElementById('palette');
+    const input = document.getElementById('paletteInput');
+    const list = document.getElementById('paletteList');
+    let filtered = commands;
+    let activeIndex = 0;
+
+    function render() {
+      list.innerHTML = '';
+      if (filtered.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'palette-empty';
+        li.textContent = 'No matching commands';
+        list.appendChild(li);
+        return;
+      }
+      filtered.forEach((cmd, i) => {
+        const li = document.createElement('li');
+        li.className = i === activeIndex ? 'active' : '';
+        li.innerHTML = `<span class="icon">${cmd.icon}</span><span>${cmd.label}</span>`;
+        li.addEventListener('mouseenter', () => { activeIndex = i; render(); });
+        li.addEventListener('click', () => runActive());
+        list.appendChild(li);
+      });
+    }
+
+    function runActive() {
+      const cmd = filtered[activeIndex];
+      dialog.close();
+      if (cmd) alert(`Ran: ${cmd.label}`);
+    }
+
+    function openPalette() {
+      input.value = '';
+      filtered = commands;
+      activeIndex = 0;
+      render();
+      dialog.showModal();
+      input.focus();
+    }
+
+    document.getElementById('openBtn').addEventListener('click', openPalette);
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        dialog.open ? dialog.close() : openPalette();
+      }
+    });
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      filtered = q
+        ? commands.filter((c) => c.label.toLowerCase().includes(q))
+        : commands;
+      activeIndex = 0;
+      render();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = (activeIndex + 1) % Math.max(filtered.length, 1);
+        render();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = (activeIndex - 1 + filtered.length) % Math.max(filtered.length, 1);
+        render();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        runActive();
+      }
+    });
+
+    // Native light-dismiss: a click that lands on the <dialog> element
+    // itself (not its content) means the backdrop was clicked.
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) dialog.close();
+    });
+  </script>
+</body>
+</html>
