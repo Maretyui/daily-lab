@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>015 — Spotlight Card Grid</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .card {
+    position: relative;
+    overflow: hidden;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    border-radius: 14px;
+    padding: 1.5rem;
+    min-height: 150px;
+    isolation: isolate;
+  }
+
+  .card h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.05rem;
+  }
+
+  .card p {
+    margin: 0;
+    font-size: 0.85rem;
+  }
+
+  /* The spotlight itself: a radial gradient whose center follows the
+     cursor via two custom properties set on pointermove, faded in/out
+     with opacity so it only appears while the pointer is over the card. */
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: radial-gradient(
+      280px circle at var(--x, 50%) var(--y, 50%),
+      rgba(20, 184, 166, 0.18),
+      transparent 70%
+    );
+  }
+
+  .card:hover::before {
+    opacity: 1;
+  }
+
+  /* A second, tighter gradient traces a glowing border edge rather than
+     a fill — same coordinates, applied as a border-image via mask. */
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: radial-gradient(
+      280px circle at var(--x, 50%) var(--y, 50%),
+      var(--accent),
+      transparent 70%
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  .card:hover::after {
+    opacity: 0.8;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Spotlight card grid</h1>
+    <p class="support-note">
+      Move your cursor over any card below — a soft teal radial glow
+      tracks the pointer inside that card only, both as a subtle fill
+      and as a glowing 1px border edge. No canvas, no JS animation loop:
+      just two CSS custom properties updated on <code>pointermove</code>
+      and a couple of pseudo-elements doing the rendering.
+    </p>
+
+    <div class="grid" id="grid">
+      <div class="card"><h3>Real-time sync</h3><p>Changes propagate to every connected client in under 50ms.</p></div>
+      <div class="card"><h3>Offline-first</h3><p>Works fully disconnected, then reconciles on reconnect.</p></div>
+      <div class="card"><h3>Typed end-to-end</h3><p>Shared types between client and server, no drift.</p></div>
+      <div class="card"><h3>Edge-deployed</h3><p>Runs close to the user on every continent by default.</p></div>
+      <div class="card"><h3>Zero-config auth</h3><p>Session handling that just works out of the box.</p></div>
+      <div class="card"><h3>Composable</h3><p>Small primitives that combine instead of one big framework.</p></div>
+    </div>
+
+    <p>
+      Each <code>.card</code> listens for its own <code>pointermove</code>
+      and computes the cursor's position relative to that card's
+      bounding box (<code>getBoundingClientRect()</code>), then writes it
+      to two inline custom properties, <code>--x</code> and
+      <code>--y</code>. A <code>::before</code> pseudo-element paints a
+      <code>radial-gradient</code> centered on those coordinates as a
+      soft fill; a <code>::after</code> pseudo-element paints the same
+      gradient again but clipped to a 1px ring via a
+      <code>mask-composite: exclude</code> trick (subtract the
+      content-box from the full box, leaving only the border strip) so
+      it reads as a glowing edge instead of a fill. Both fade in and out
+      purely via CSS <code>opacity</code> transitions on
+      <code>:hover</code> — the JS never touches visibility, only
+      position.
+    </p>
+  </main>
+
+  <script>
+    const grid = document.getElementById('grid');
+
+    grid.querySelectorAll('.card').forEach((card) => {
+      card.addEventListener('pointermove', (e) => {
+        const rect = card.getBoundingClientRect();
+        card.style.setProperty('--x', `${e.clientX - rect.left}px`);
+        card.style.setProperty('--y', `${e.clientY - rect.top}px`);
+      });
+    });
+  </script>
+</body>
+</html>
