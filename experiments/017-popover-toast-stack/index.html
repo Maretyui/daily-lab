@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>017 — Popover Toast Stack</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+    --info: #38bdf8;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --error: #f87171;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .support-note {
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem 1.5rem;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    padding: 1rem 0;
+  }
+
+  .spawn-btn {
+    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.65rem 1.1rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .spawn-btn:hover {
+    transform: translateY(-1px);
+  }
+  .spawn-btn svg { width: 1.05em; height: 1.05em; flex: none; }
+
+  .spawn-btn[data-type="info"] { border-color: color-mix(in srgb, var(--info) 40%, #1f2530); }
+  .spawn-btn[data-type="info"] svg { color: var(--info); }
+  .spawn-btn[data-type="success"] { border-color: color-mix(in srgb, var(--success) 40%, #1f2530); }
+  .spawn-btn[data-type="success"] svg { color: var(--success); }
+  .spawn-btn[data-type="warning"] { border-color: color-mix(in srgb, var(--warning) 40%, #1f2530); }
+  .spawn-btn[data-type="warning"] svg { color: var(--warning); }
+  .spawn-btn[data-type="error"] { border-color: color-mix(in srgb, var(--error) 40%, #1f2530); }
+  .spawn-btn[data-type="error"] svg { color: var(--error); }
+
+  .clear-btn {
+    font: inherit;
+    background: transparent;
+    border: 1px solid #1f2530;
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 0.65rem 1.1rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .clear-btn:hover { color: var(--text); border-color: var(--muted); }
+
+  /* --- The toasts themselves --- */
+
+  .toast {
+    position: fixed;
+    right: 1.5rem;
+    left: auto;
+    top: 1.5rem;
+    margin: 0;
+    width: min(340px, calc(100vw - 3rem));
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid #232a38;
+    border-left: 3px solid var(--muted);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+
+    /* Popovers default to display:none when closed. Combining
+       transition-behavior: allow-discrete on `display`/`overlay` with
+       @starting-style below lets the browser animate the none -> block
+       (and the reverse) transition instead of an instant snap. */
+    opacity: 0;
+    transform: translateX(120%);
+    transition:
+      opacity 0.35s ease,
+      transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+      top 0.3s ease,
+      overlay 0.35s allow-discrete,
+      display 0.35s allow-discrete;
+  }
+
+  .toast:popover-open {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  @starting-style {
+    .toast:popover-open {
+      opacity: 0;
+      transform: translateX(120%);
+    }
+  }
+
+  .toast.leaving {
+    opacity: 0;
+    transform: translateX(120%) scale(0.96);
+  }
+
+  .toast[data-type="info"] { border-left-color: var(--info); }
+  .toast[data-type="success"] { border-left-color: var(--success); }
+  .toast[data-type="warning"] { border-left-color: var(--warning); }
+  .toast[data-type="error"] { border-left-color: var(--error); }
+
+  .toast .icon { flex: none; width: 1.35rem; height: 1.35rem; margin-top: 0.1rem; }
+  .toast[data-type="info"] .icon { color: var(--info); }
+  .toast[data-type="success"] .icon { color: var(--success); }
+  .toast[data-type="warning"] .icon { color: var(--warning); }
+  .toast[data-type="error"] .icon { color: var(--error); }
+
+  .toast .body { flex: 1; min-width: 0; }
+  .toast .title { font-weight: 600; font-size: 0.9rem; }
+  .toast .message { margin-top: 0.2rem; font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+
+  .toast .dismiss {
+    flex: none;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0.15rem;
+    border-radius: 6px;
+    line-height: 0;
+  }
+  .toast .dismiss:hover { color: var(--text); background: #1f2530; }
+  .toast .dismiss svg { width: 1rem; height: 1rem; display: block; }
+
+  .toast .progress-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: transparent;
+  }
+  .toast .progress-fill {
+    height: 100%;
+    width: 100%;
+    transform-origin: left;
+    background: currentColor;
+    animation: shrink linear forwards;
+    animation-duration: var(--duration, 4000ms);
+  }
+  .toast[data-type="info"] .progress-fill { color: var(--info); }
+  .toast[data-type="success"] .progress-fill { color: var(--success); }
+  .toast[data-type="warning"] .progress-fill { color: var(--warning); }
+  .toast[data-type="error"] .progress-fill { color: var(--error); }
+
+  .toast.paused .progress-fill { animation-play-state: paused; }
+
+  @keyframes shrink {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast {
+      transition-duration: 0.001ms !important;
+    }
+    .progress-fill { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Popover toast stack</h1>
+    <p class="support-note">
+      Every toast below is its own native <code>popover="manual"</code>
+      element — rendered straight into the browser's top layer, so it's
+      always painted above everything on the page with zero
+      <code>z-index</code> bookkeeping. Entry and exit animate through
+      <code>@starting-style</code> plus
+      <code>transition-behavior: allow-discrete</code>, which lets a
+      <code>display: none</code> element transition in and out instead of
+      snapping instantly.
+    </p>
+
+    <div class="controls">
+      <button class="spawn-btn" type="button" data-type="info">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        Info toast
+      </button>
+      <button class="spawn-btn" type="button" data-type="success">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        Success toast
+      </button>
+      <button class="spawn-btn" type="button" data-type="warning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        Warning toast
+      </button>
+      <button class="spawn-btn" type="button" data-type="error">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+        Error toast
+      </button>
+      <button class="clear-btn" type="button" id="clearAll">Clear all</button>
+    </div>
+
+    <p>
+      Each click creates a fresh <code>&lt;div popover="manual"&gt;</code>,
+      appends it to the document, and calls
+      <code>.showPopover()</code>. Using <code>manual</code> rather than the
+      default <code>auto</code> value matters here: an
+      <code>auto</code> popover closes any other <code>auto</code> popover
+      the moment a new one opens, which is exactly right for a menu but
+      wrong for a notification stack — <code>manual</code> popovers are
+      independent, so several can stay open side by side. Every toast still
+      gets Escape-to-dismiss and light-dismiss for free from the API; this
+      demo also layers on its own auto-dismiss timer, a hover-to-pause
+      progress bar, and a real close button.
+    </p>
+    <p>
+      Removal is driven by the popover's own <code>toggle</code> event
+      rather than a guessed timeout: calling <code>hidePopover()</code>
+      starts the CSS exit transition (thanks to <code>allow-discrete</code>
+      on <code>display</code>/<code>overlay</code>), and once the browser
+      reports <code>event.newState === "closed"</code> the element is
+      actually removed from the DOM and the remaining toasts smoothly
+      reflow upward via a plain <code>top</code> transition recalculated on
+      every add/remove.
+    </p>
+  </main>
+
+  <script>
+    const TYPES = {
+      info: {
+        title: 'Heads up',
+        message: 'This is an informational toast — nothing needs your attention.',
+        icon: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+      },
+      success: {
+        title: 'Saved',
+        message: 'Your changes were saved successfully.',
+        icon: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+      },
+      warning: {
+        title: 'Careful',
+        message: 'This action can’t easily be undone.',
+        icon: '<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+      },
+      error: {
+        title: 'Something failed',
+        message: 'The request could not be completed. Try again.',
+        icon: '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+      },
+    };
+
+    const GAP = 12;
+    const DURATION = 4500;
+    const active = [];
+
+    function positionToasts() {
+      let offset = 24;
+      active.forEach((entry) => {
+        entry.el.style.top = `${offset}px`;
+        offset += entry.el.getBoundingClientRect().height + GAP;
+      });
+    }
+
+    function removeToast(entry) {
+      if (entry.timeoutId) clearTimeout(entry.timeoutId);
+      const index = active.indexOf(entry);
+      if (index !== -1) active.splice(index, 1);
+      entry.el.remove();
+      positionToasts();
+    }
+
+    function dismiss(entry) {
+      if (entry.timeoutId) clearTimeout(entry.timeoutId);
+      entry.timeoutId = null;
+      // hidePopover() kicks off the CSS exit transition itself (allow-discrete
+      // keeps the element rendered until it finishes); the actual DOM cleanup
+      // happens in the "toggle" listener once the browser confirms it's closed.
+      if (entry.el.matches(':popover-open')) entry.el.hidePopover();
+    }
+
+    function spawnToast(type) {
+      const def = TYPES[type];
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.dataset.type = type;
+      el.setAttribute('popover', 'manual');
+      el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+      el.style.setProperty('--duration', `${DURATION}ms`);
+      el.innerHTML = `
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${def.icon}</svg>
+        <div class="body">
+          <div class="title">${def.title}</div>
+          <div class="message">${def.message}</div>
+        </div>
+        <button class="dismiss" type="button" aria-label="Dismiss">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+        <div class="progress-track"><div class="progress-fill"></div></div>
+      `;
+
+      document.body.appendChild(el);
+      el.showPopover();
+
+      const entry = { el, timeoutId: null, remaining: DURATION, startedAt: performance.now() };
+      active.push(entry);
+      positionToasts();
+
+      entry.timeoutId = setTimeout(() => dismiss(entry), DURATION);
+
+      el.addEventListener('mouseenter', () => {
+        if (!entry.timeoutId) return;
+        clearTimeout(entry.timeoutId);
+        entry.timeoutId = null;
+        entry.remaining -= performance.now() - entry.startedAt;
+        el.classList.add('paused');
+      });
+
+      el.addEventListener('mouseleave', () => {
+        if (entry.timeoutId) return;
+        entry.startedAt = performance.now();
+        entry.timeoutId = setTimeout(() => dismiss(entry), Math.max(entry.remaining, 0));
+        el.classList.remove('paused');
+      });
+
+      el.querySelector('.dismiss').addEventListener('click', () => dismiss(entry));
+
+      // Fires for every open/close of this popover, including Escape-key
+      // and light-dismiss (clicking outside) — not just our own calls to
+      // hidePopover(), which is what makes this the right place to clean up.
+      el.addEventListener('toggle', (event) => {
+        if (event.newState === 'closed') removeToast(entry);
+      });
+    }
+
+    document.querySelectorAll('.spawn-btn').forEach((btn) => {
+      btn.addEventListener('click', () => spawnToast(btn.dataset.type));
+    });
+
+    document.getElementById('clearAll').addEventListener('click', () => {
+      [...active].forEach(dismiss);
+    });
+  </script>
+</body>
+</html>
