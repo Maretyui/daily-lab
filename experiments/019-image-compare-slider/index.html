@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>019 — Before/After Compare Slider</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    align-items: center;
+    text-align: center;
+  }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+    text-align: left;
+    align-self: stretch;
+  }
+
+  main > p code {
+    background: var(--card);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--text);
+  }
+
+  .compare {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #1f2530;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    /* The slider handle's horizontal position, driven by the range
+       input below via a plain "input" event listener. Every other rule
+       in this component reads from this one variable. */
+    --pos: 50%;
+    touch-action: pan-y;
+  }
+
+  .compare .layer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    padding: 1rem 1.25rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  }
+
+  .compare .after {
+    background: linear-gradient(135deg, #1e293b, #0f172a 45%, #14532d);
+  }
+
+  .compare .before {
+    background: linear-gradient(135deg, #64748b, #334155 45%, #475569);
+    /* Everything left of --pos shows the "before" layer; everything
+       right of it is clipped away, revealing the "after" layer beneath. */
+    clip-path: inset(0 calc(100% - var(--pos)) 0 0);
+  }
+
+  .compare .divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--pos);
+    width: 3px;
+    background: #fff;
+    transform: translateX(-50%);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+  }
+
+  .compare .handle {
+    position: absolute;
+    top: 50%;
+    left: var(--pos);
+    transform: translate(-50%, -50%);
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: #fff;
+    color: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+  }
+
+  .compare input[type="range"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: ew-resize;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1 style="margin: 0; font-size: 1.6rem;">Before/after compare slider</h1>
+    <p>
+      A single <code>&lt;input type="range"&gt;</code>, made invisible and
+      stretched over the whole image, drives one CSS custom property
+      (<code>--pos</code>). Everything else - the clip-path on the "before"
+      layer, the divider line, the round handle - just reads that variable,
+      so there's exactly one piece of JavaScript state and zero manual
+      style writes per frame.
+    </p>
+
+    <div class="compare" id="compare">
+      <div class="layer after">After</div>
+      <div class="layer before" id="beforeLayer">Before</div>
+      <div class="divider"></div>
+      <div class="handle">&#8596;</div>
+      <input type="range" min="0" max="100" value="50" id="slider" aria-label="Compare position">
+    </div>
+
+    <p>
+      Using the native range input for the drag interaction (rather than
+      hand-rolling pointer-move math) means keyboard support, touch
+      support, and accessible focus styling all come for free - arrow keys
+      nudge the slider by 1%, Home/End jump to the edges, and screen
+      readers announce it as a slider with its current value.
+    </p>
+  </main>
+
+  <script>
+    const compare = document.getElementById('compare');
+    const slider = document.getElementById('slider');
+
+    slider.addEventListener('input', () => {
+      compare.style.setProperty('--pos', `${slider.value}%`);
+    });
+  </script>
+</body>
+</html>
