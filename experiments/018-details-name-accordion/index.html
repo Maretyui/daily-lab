@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>018 — Exclusive Native Accordion</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  main > p code {
+    background: var(--card);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--text);
+  }
+
+  h2 {
+    margin: 0 0 -0.75rem;
+    font-size: 1.05rem;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  details {
+    background: var(--card);
+    border: 1px solid #1f2530;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  summary {
+    cursor: pointer;
+    padding: 0.9rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    list-style: none;
+    user-select: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+
+  summary::after {
+    content: '+';
+    color: var(--accent);
+    font-size: 1.2rem;
+    line-height: 1;
+    transition: transform 0.2s ease;
+  }
+  details[open] summary::after {
+    transform: rotate(45deg);
+  }
+
+  summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  details p {
+    margin: 0;
+    padding: 0 1.1rem 1rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  /* The open/close itself is native and instant, but the content can
+     still be animated with a calc-driven max-height on ::details-content
+     in browsers that support it - kept out here to keep this demo's
+     actual point (the `name` grouping) unobscured by extra CSS. */
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1 style="margin: 0; font-size: 1.6rem;">Exclusive native accordion</h1>
+    <p>
+      Give a group of <code>&lt;details&gt;</code> elements the same
+      <code>name</code> attribute and the browser turns them into an
+      accordion on its own: opening one closes any other member of the
+      group, exactly like radio inputs sharing a <code>name</code>. No
+      JavaScript, no ARIA wiring, no listening for <code>toggle</code>
+      events to close siblings by hand - the browser already knows they're
+      mutually exclusive.
+    </p>
+
+    <h2>Grouped with <code>name="faq"</code> - opening one closes the rest</h2>
+    <div class="group">
+      <details name="faq" open>
+        <summary>What actually links these together?</summary>
+        <p>
+          Just <code>&lt;details name="faq"&gt;</code> on each element in
+          the group. That's the entire mechanism - the same attribute,
+          repeated.
+        </p>
+      </details>
+      <details name="faq">
+        <summary>Does this need any JavaScript?</summary>
+        <p>
+          None. The exclusivity is implemented by the browser's own HTML
+          parser/rendering engine, the same layer that already handles
+          <code>&lt;details&gt;</code>/<code>&lt;summary&gt;</code>
+          toggling and radio button groups.
+        </p>
+      </details>
+      <details name="faq">
+        <summary>What if a browser doesn't support grouping?</summary>
+        <p>
+          It degrades gracefully: the <code>name</code> attribute is simply
+          ignored and every <code>&lt;details&gt;</code> behaves
+          independently, same as it always has. Nothing breaks, you just
+          lose the exclusivity until that browser catches up.
+        </p>
+      </details>
+    </div>
+
+    <h2>Ungrouped - each opens and closes independently</h2>
+    <div class="group">
+      <details>
+        <summary>This one has no <code>name</code> attribute</summary>
+        <p>Try opening this and the one below at the same time.</p>
+      </details>
+      <details>
+        <summary>Neither does this one</summary>
+        <p>Both can stay open together - that's the default, un-grouped behavior.</p>
+      </details>
+    </div>
+
+    <p>
+      One quirk worth knowing: if two grouped <code>&lt;details&gt;</code>
+      both start with the <code>open</code> attribute, the browser has to
+      pick a winner at parse time - only the first one actually renders
+      open, and the rest are force-closed even though their markup says
+      otherwise. Only mark one element per group <code>open</code> to
+      begin with.
+    </p>
+  </main>
+</body>
+</html>
