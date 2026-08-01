@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>022 — Cross-Tab Whiteboard</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  main > p code {
+    background: var(--card);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--text);
+  }
+
+  .callout {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.8rem 1rem;
+    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid #1f2530;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .callout strong { color: var(--text); }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .dot.live {
+    background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.18);
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+
+  .swatches {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+  }
+  .swatch.active {
+    border-color: var(--text);
+  }
+
+  input[type="range"] {
+    accent-color: var(--accent);
+  }
+
+  button.action {
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--text);
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: inherit;
+    margin-left: auto;
+  }
+  button.action:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .board-wrap {
+    position: relative;
+    border: 1px dashed #1f2530;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #0e1219;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 380px;
+    touch-action: none;
+    cursor: crosshair;
+  }
+
+  .peer-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #0e1219;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: left 0.06s linear, top 0.06s linear, opacity 0.3s ease;
+  }
+  .peer-cursor .peer-label {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.65rem;
+    white-space: nowrap;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1 style="margin: 0; font-size: 1.6rem;">Cross-tab whiteboard</h1>
+    <p>
+      A shared drawing surface with no server, no websocket, and no
+      polling. Every stroke segment and every pointer position gets
+      posted through a <code>BroadcastChannel</code> - a same-origin
+      message bus the browser itself provides between tabs, windows and
+      iframes. Open this exact page in a second tab side by side and
+      draw: the strokes and the live cursor appear there instantly, and
+      vice versa.
+    </p>
+
+    <div class="callout">
+      <span class="dot" id="liveDot"></span>
+      <span id="peerLabel"><strong>Solo</strong> - open another tab of this page to connect</span>
+    </div>
+
+    <div class="toolbar">
+      <div class="swatches" id="swatches"></div>
+      <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.8rem; color:var(--muted);">
+        size
+        <input type="range" id="sizeRange" min="2" max="24" value="6">
+      </label>
+      <button class="action" id="clearBtn" type="button">Clear board</button>
+    </div>
+
+    <div class="board-wrap" id="boardWrap">
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <p>
+      Only three message shapes cross the channel: a <code>stroke</code>
+      segment (from-point, to-point, color, width), a <code>cursor</code>
+      position sent on every <code>pointermove</code>, and a
+      <code>clear</code>. Each tab tags its messages with a random
+      <code>peerId</code> generated once per tab and ignores its own
+      echoes. A tab that goes quiet for a couple seconds - closed,
+      backgrounded, whatever - simply ages out of the peer list; there's
+      no handshake or disconnect event to listen for, just a timeout.
+    </p>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const boardWrap = document.getElementById('boardWrap');
+    const ctx = canvas.getContext('2d');
+    const swatchesEl = document.getElementById('swatches');
+    const sizeRange = document.getElementById('sizeRange');
+    const clearBtn = document.getElementById('clearBtn');
+    const liveDot = document.getElementById('liveDot');
+    const peerLabel = document.getElementById('peerLabel');
+
+    const COLORS = ['#e6e9ef', '#14b8a6', '#fbbf24', '#f472b6', '#60a5fa', '#a78bfa'];
+    let currentColor = COLORS[1];
+    let currentSize = Number(sizeRange.value);
+
+    const peerId = crypto.randomUUID();
+    const peerColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+
+    function resizeCanvas() {
+      const rect = boardWrap.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const prev = canvas.width && canvas.height
+        ? ctx.getImageData(0, 0, canvas.width, canvas.height)
+        : null;
+      canvas.width = rect.width * dpr;
+      canvas.height = 380 * dpr;
+      ctx.scale(dpr, dpr);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (prev) ctx.putImageData(prev, 0, 0);
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    function drawSegment(x0, y0, x1, y1, color, size) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = size;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+
+    function clearBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // --- Broadcast channel wiring ---
+    const supported = 'BroadcastChannel' in window;
+    const channel = supported ? new BroadcastChannel('daily-lab-022-whiteboard') : null;
+
+    const peers = new Map(); // peerId -> { color, lastSeen, el }
+    const PEER_TIMEOUT = 2500;
+
+    function ensurePeerEl(id, color) {
+      let entry = peers.get(id);
+      if (!entry) {
+        const el = document.createElement('div');
+        el.className = 'peer-cursor';
+        el.style.background = color;
+        const label = document.createElement('span');
+        label.className = 'peer-label';
+        label.textContent = id.slice(0, 4);
+        el.appendChild(label);
+        boardWrap.appendChild(el);
+        entry = { color, el };
+        peers.set(id, entry);
+      }
+      entry.lastSeen = Date.now();
+      return entry;
+    }
+
+    function updatePeerLabel() {
+      const count = peers.size;
+      liveDot.classList.toggle('live', count > 0);
+      peerLabel.innerHTML = count > 0
+        ? `<strong>${count} other tab${count === 1 ? '' : 's'}</strong> drawing live`
+        : `<strong>Solo</strong> - open another tab of this page to connect`;
+    }
+
+    setInterval(() => {
+      const now = Date.now();
+      let changed = false;
+      for (const [id, entry] of peers) {
+        if (now - entry.lastSeen > PEER_TIMEOUT) {
+          entry.el.remove();
+          peers.delete(id);
+          changed = true;
+        }
+      }
+      if (changed) updatePeerLabel();
+    }, 800);
+
+    if (channel) {
+      channel.onmessage = (e) => {
+        const msg = e.data;
+        if (!msg || msg.peerId === peerId) return;
+
+        if (msg.type === 'stroke') {
+          drawSegment(msg.x0, msg.y0, msg.x1, msg.y1, msg.color, msg.size);
+        } else if (msg.type === 'clear') {
+          clearBoard();
+        } else if (msg.type === 'cursor') {
+          const entry = ensurePeerEl(msg.peerId, msg.color);
+          entry.el.style.left = `${msg.x}px`;
+          entry.el.style.top = `${msg.y}px`;
+          entry.el.style.opacity = '1';
+          updatePeerLabel();
+        } else if (msg.type === 'leave') {
+          const entry = peers.get(msg.peerId);
+          if (entry) {
+            entry.el.remove();
+            peers.delete(msg.peerId);
+            updatePeerLabel();
+          }
+        }
+        return true;
+      };
+    } else {
+      peerLabel.textContent = 'BroadcastChannel is not supported in this browser - drawing stays local only.';
+    }
+
+    window.addEventListener('pagehide', () => {
+      channel?.postMessage({ type: 'leave', peerId });
+    });
+
+    // --- Drawing input ---
+    let drawing = false;
+    let last = null;
+
+    function toLocalPoint(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      drawing = true;
+      last = toLocalPoint(e);
+      canvas.setPointerCapture(e.pointerId);
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      const p = toLocalPoint(e);
+      channel?.postMessage({ type: 'cursor', peerId, color: peerColor, x: p.x, y: p.y });
+
+      if (!drawing) return;
+      drawSegment(last.x, last.y, p.x, p.y, currentColor, currentSize);
+      channel?.postMessage({
+        type: 'stroke',
+        peerId,
+        x0: last.x, y0: last.y, x1: p.x, y1: p.y,
+        color: currentColor, size: currentSize,
+      });
+      last = p;
+    });
+
+    function stopDrawing() { drawing = false; last = null; }
+    canvas.addEventListener('pointerup', stopDrawing);
+    canvas.addEventListener('pointercancel', stopDrawing);
+    canvas.addEventListener('pointerleave', stopDrawing);
+
+    // --- Toolbar ---
+    COLORS.forEach((color, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'swatch';
+      btn.type = 'button';
+      btn.style.background = color;
+      btn.setAttribute('aria-label', `Color ${color}`);
+      if (i === 1) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        currentColor = color;
+        swatchesEl.querySelectorAll('.swatch').forEach((s) => s.classList.remove('active'));
+        btn.classList.add('active');
+      });
+      swatchesEl.appendChild(btn);
+    });
+
+    sizeRange.addEventListener('input', () => {
+      currentSize = Number(sizeRange.value);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      clearBoard();
+      channel?.postMessage({ type: 'clear', peerId });
+    });
+  </script>
+</body>
+</html>
