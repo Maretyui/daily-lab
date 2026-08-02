@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>025 — Scroll-Driven View Timeline Gallery</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 10;
+  }
+  a.back:hover { color: var(--accent); }
+
+  header {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 6rem 2rem 2rem;
+  }
+
+  header p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  header p code {
+    background: var(--card);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--text);
+  }
+
+  .no-support {
+    display: none;
+    background: #3a2f1a;
+    border: 1px solid #5a4a2a;
+    color: #f3d38a;
+    padding: 0.9rem 1.1rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  @supports not (animation-timeline: view()) {
+    .no-support { display: block; }
+  }
+
+  main {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 2rem 12rem;
+    display: flex;
+    flex-direction: column;
+    gap: 14rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid #1f2530;
+    border-radius: 18px;
+    padding: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+
+    /* No JS: the browser itself drives this animation off scroll
+       position, keyed to when THIS element crosses the viewport. */
+    animation: reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 35%;
+  }
+
+  .card .n {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--accent);
+    font-size: 0.85rem;
+  }
+
+  .card h2 {
+    margin: 0;
+    font-size: 1.4rem;
+  }
+
+  .card p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(64px) scale(0.94);
+      filter: blur(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+
+  .spacer {
+    height: 40vh;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <header>
+    <h1 style="margin: 0 0 1rem; font-size: 1.6rem;">Scroll-driven view timeline gallery</h1>
+    <p>
+      Every card below fades, un-blurs and slides into place purely
+      from CSS - no <code>IntersectionObserver</code>, no scroll event
+      listener, not a single line of JavaScript. It's built on the
+      CSS <code>animation-timeline: view()</code> and
+      <code>animation-range</code> properties: instead of a timeline
+      driven by time, the animation's progress is driven directly by
+      how far each card has scrolled through the viewport. The
+      browser handles it on the compositor thread, so it stays smooth
+      even on a very long page.
+    </p>
+    <p class="no-support">
+      Your browser doesn't support scroll-driven animations
+      (<code>animation-timeline: view()</code>) yet - the cards below
+      will just appear instantly instead of animating in. This is a
+      progressive-enhancement technique: nothing breaks without it.
+    </p>
+  </header>
+
+  <div class="spacer"></div>
+
+  <main id="gallery"></main>
+
+  <div class="spacer"></div>
+
+  <script>
+    const CARDS = [
+      { n: '01', title: 'Entry range', body: 'animation-range: entry 0% cover 35% ties 0%→100% of the keyframes to the card’s own entry into (and first 35% through) the viewport, not to a fixed duration.' },
+      { n: '02', title: 'No observer needed', body: 'The browser recalculates progress on the compositor thread as you scroll - there is no JS scroll handler running at all, so it never drops frames under load.' },
+      { n: '03', title: 'Named view timelines', body: 'Each element with animation-timeline: view() implicitly gets its own timeline scoped to its own scroll position - two cards never interfere with each other.' },
+      { n: '04', title: 'Still just a @keyframes', body: 'The animation itself (opacity, transform, blur) is completely ordinary CSS - only the thing driving its progress (scroll position instead of wall-clock time) is new.' },
+      { n: '05', title: 'Graceful degradation', body: 'Unsupported browsers just render the "to" state immediately via @supports not (...) - the content is never hidden or broken, only the flourish is skipped.' },
+    ];
+
+    const gallery = document.getElementById('gallery');
+    for (const { n, title, body } of CARDS) {
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.innerHTML = `<span class="n">${n}</span><h2>${title}</h2><p>${body}</p>`;
+      gallery.appendChild(card);
+    }
+  </script>
+</body>
+</html>
