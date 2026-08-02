@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>024 — Maze Generator + A* Pathfinder</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+  }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+    align-self: stretch;
+  }
+
+  main > p code {
+    background: var(--card);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--text);
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-self: stretch;
+  }
+
+  button.action {
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--text);
+    padding: 0.6rem 1.1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: inherit;
+  }
+  button.action:hover { border-color: var(--accent); color: var(--accent); }
+  button.action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .speed {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    margin-left: auto;
+  }
+  input[type="range"] { accent-color: var(--accent); }
+
+  .stats {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    align-self: stretch;
+  }
+  .stats b { color: var(--text); }
+
+  canvas {
+    background: var(--card);
+    border: 1px solid #1f2530;
+    border-radius: 14px;
+    max-width: 100%;
+  }
+
+  .legend {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+    color: var(--muted);
+    align-self: stretch;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 3px;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1 style="margin: 0; font-size: 1.6rem; align-self: stretch;">Maze generator + A* pathfinder</h1>
+    <p>
+      A perfect maze (exactly one path between any two cells, no loops)
+      is carved with a randomized depth-first backtracker, then solved
+      live with the <code>A*</code> search algorithm using Manhattan
+      distance as the heuristic. Frontier and visited cells are drawn
+      as the search actually explores them, so you can watch A*'s
+      heuristic pull it toward the goal instead of exploring blindly
+      like a breadth-first flood fill would.
+    </p>
+
+    <div class="toolbar">
+      <button class="action" id="generateBtn" type="button">New Maze</button>
+      <button class="action" id="solveBtn" type="button">Solve (A*)</button>
+      <label class="speed">
+        speed
+        <input type="range" id="speedRange" min="1" max="10" value="6">
+      </label>
+    </div>
+
+    <div class="stats">
+      <span>visited: <b id="visitedCount">0</b></span>
+      <span>path length: <b id="pathLength">–</b></span>
+    </div>
+
+    <canvas id="mazeCanvas" width="600" height="600"></canvas>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:#1f2530"></span> unvisited</span>
+      <span><span class="swatch" style="background:#2a3245"></span> frontier</span>
+      <span><span class="swatch" style="background:#3a2f52"></span> visited</span>
+      <span><span class="swatch" style="background:var(--accent)"></span> shortest path</span>
+    </div>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('mazeCanvas');
+    const ctx = canvas.getContext('2d');
+    const generateBtn = document.getElementById('generateBtn');
+    const solveBtn = document.getElementById('solveBtn');
+    const speedRange = document.getElementById('speedRange');
+    const visitedCountEl = document.getElementById('visitedCount');
+    const pathLengthEl = document.getElementById('pathLength');
+
+    const COLS = 25;
+    const ROWS = 25;
+    const CELL = canvas.width / COLS;
+
+    // Each cell tracks which of its four walls are still standing.
+    let grid = [];
+    let solving = false;
+
+    function makeGrid() {
+      const cells = [];
+      for (let r = 0; r < ROWS; r++) {
+        const row = [];
+        for (let c = 0; c < COLS; c++) {
+          row.push({ r, c, walls: { n: true, s: true, e: true, w: true }, visited: false });
+        }
+        cells.push(row);
+      }
+      return cells;
+    }
+
+    function neighborsUncarved(cell) {
+      const { r, c } = cell;
+      const deltas = [
+        ['n', r - 1, c],
+        ['s', r + 1, c],
+        ['e', r, c + 1],
+        ['w', r, c - 1],
+      ];
+      return deltas
+        .filter(([, nr, nc]) => nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && !grid[nr][nc].visited)
+        .map(([dir, nr, nc]) => ({ dir, cell: grid[nr][nc] }));
+    }
+
+    const OPPOSITE = { n: 's', s: 'n', e: 'w', w: 'e' };
+
+    function carveMaze() {
+      grid = makeGrid();
+      const stack = [grid[0][0]];
+      grid[0][0].visited = true;
+
+      while (stack.length) {
+        const current = stack[stack.length - 1];
+        const options = neighborsUncarved(current);
+        if (!options.length) {
+          stack.pop();
+          continue;
+        }
+        const { dir, cell: next } = options[Math.floor(Math.random() * options.length)];
+        current.walls[dir] = false;
+        next.walls[OPPOSITE[dir]] = false;
+        next.visited = true;
+        stack.push(next);
+      }
+    }
+
+    function drawMaze(overlay = {}) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Overlay fills first, walls drawn on top.
+      const { frontier = new Set(), visited = new Set(), path = [] } = overlay;
+      for (const key of frontier) paintCell(key, '#2a3245');
+      for (const key of visited) paintCell(key, '#3a2f52');
+      for (const key of path) paintCell(key, getComputedStyle(document.documentElement).getPropertyValue('--accent'));
+
+      ctx.strokeStyle = '#3a4256';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'square';
+      ctx.beginPath();
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cell = grid[r][c];
+          const x = c * CELL;
+          const y = r * CELL;
+          if (cell.walls.n) { ctx.moveTo(x, y); ctx.lineTo(x + CELL, y); }
+          if (cell.walls.w) { ctx.moveTo(x, y); ctx.lineTo(x, y + CELL); }
+          if (r === ROWS - 1 && cell.walls.s) { ctx.moveTo(x, y + CELL); ctx.lineTo(x + CELL, y + CELL); }
+          if (c === COLS - 1 && cell.walls.e) { ctx.moveTo(x + CELL, y); ctx.lineTo(x + CELL, y + CELL); }
+        }
+      }
+      ctx.stroke();
+
+      markCell(0, 0, '#4ade80');
+      markCell(ROWS - 1, COLS - 1, '#f472b6');
+    }
+
+    function paintCell(key, color) {
+      const [r, c] = key.split(',').map(Number);
+      ctx.fillStyle = color;
+      ctx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2);
+    }
+
+    function markCell(r, c, color) {
+      ctx.fillStyle = color;
+      const pad = CELL * 0.28;
+      ctx.beginPath();
+      ctx.arc(c * CELL + CELL / 2, r * CELL + CELL / 2, CELL / 2 - pad, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function neighborsOpen(cell) {
+      const { r, c, walls } = cell;
+      const out = [];
+      if (!walls.n && r > 0) out.push(grid[r - 1][c]);
+      if (!walls.s && r < ROWS - 1) out.push(grid[r + 1][c]);
+      if (!walls.e && c < COLS - 1) out.push(grid[r][c + 1]);
+      if (!walls.w && c > 0) out.push(grid[r][c - 1]);
+      return out;
+    }
+
+    function heuristic(a, b) {
+      return Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
+    }
+
+    function key(cell) { return `${cell.r},${cell.c}`; }
+
+    async function solveAStar() {
+      const start = grid[0][0];
+      const goal = grid[ROWS - 1][COLS - 1];
+
+      const gScore = new Map([[key(start), 0]]);
+      const cameFrom = new Map();
+      const open = new Map([[key(start), start]]);
+      const openScore = new Map([[key(start), heuristic(start, goal)]]);
+      const visited = new Set();
+      let steps = 0;
+
+      while (open.size) {
+        let bestKey = null;
+        let bestScore = Infinity;
+        for (const [k, score] of openScore) {
+          if (score < bestScore) { bestScore = score; bestKey = k; }
+        }
+        const current = open.get(bestKey);
+        open.delete(bestKey);
+        openScore.delete(bestKey);
+
+        if (current === goal) {
+          const path = [];
+          let node = current;
+          while (node) {
+            path.push(key(node));
+            node = cameFrom.get(key(node));
+          }
+          drawMaze({ visited, path: new Set(path) });
+          pathLengthEl.textContent = path.length;
+          return;
+        }
+
+        visited.add(key(current));
+
+        for (const next of neighborsOpen(current)) {
+          const nk = key(next);
+          if (visited.has(nk)) continue;
+          const tentative = gScore.get(key(current)) + 1;
+          if (tentative < (gScore.get(nk) ?? Infinity)) {
+            cameFrom.set(nk, current);
+            gScore.set(nk, tentative);
+            openScore.set(nk, tentative + heuristic(next, goal));
+            open.set(nk, next);
+          }
+        }
+
+        steps++;
+        visitedCountEl.textContent = visited.size;
+        if (steps % Math.max(1, 11 - Number(speedRange.value)) === 0) {
+          drawMaze({ frontier: new Set(open.keys()), visited });
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+      }
+
+      pathLengthEl.textContent = 'no path';
+    }
+
+    generateBtn.addEventListener('click', () => {
+      if (solving) return;
+      carveMaze();
+      visitedCountEl.textContent = '0';
+      pathLengthEl.textContent = '–';
+      drawMaze();
+    });
+
+    solveBtn.addEventListener('click', async () => {
+      if (solving) return;
+      solving = true;
+      generateBtn.disabled = true;
+      solveBtn.disabled = true;
+      visitedCountEl.textContent = '0';
+      pathLengthEl.textContent = '–';
+      await solveAStar();
+      generateBtn.disabled = false;
+      solveBtn.disabled = false;
+      solving = false;
+    });
+
+    carveMaze();
+    drawMaze();
+  </script>
+</body>
+</html>
