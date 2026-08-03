@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>027 — Word Guess</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+    --miss: #232a38;
+    --present: #b58a1f;
+    --hit: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  #board {
+    display: grid;
+    grid-template-rows: repeat(6, 1fr);
+    gap: 0.4rem;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.4rem;
+  }
+
+  .tile {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.4rem;
+    text-transform: uppercase;
+    background: var(--card);
+    border: 2px solid #232a38;
+    border-radius: 6px;
+    transition: transform 0.15s, background 0.3s, border-color 0.3s;
+  }
+
+  .tile.pop { transform: scale(1.08); }
+  .tile.miss { background: var(--miss); border-color: var(--miss); color: var(--muted); }
+  .tile.present { background: var(--present); border-color: var(--present); color: #14110a; }
+  .tile.hit { background: var(--hit); border-color: var(--hit); color: #06231f; }
+
+  #status {
+    min-height: 1.4rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  #keyboard {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+  }
+
+  .krow {
+    display: flex;
+    gap: 0.3rem;
+    justify-content: center;
+  }
+
+  .key {
+    flex: 1;
+    max-width: 40px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--card);
+    border: 1px solid #2a3245;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .key:hover { border-color: var(--accent); }
+  .key.wide { max-width: 64px; font-size: 0.7rem; }
+  .key.miss { background: var(--miss); color: var(--muted); }
+  .key.present { background: var(--present); color: #14110a; }
+  .key.hit { background: var(--hit); color: #06231f; }
+
+  button.reset {
+    background: transparent;
+    border: 1px solid #2a3245;
+    color: var(--text);
+    padding: 0.5rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button.reset:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>027 — Word Guess</h1>
+  <p class="desc">
+    A small Wordle-style guesser. Six tries, five letters, on-screen or
+    physical keyboard both work. Word list is a fixed local pool, no
+    server round-trip — refresh for a new secret word any time.
+  </p>
+  <div id="board"></div>
+  <div id="status">Guess the 5-letter word</div>
+  <div id="keyboard"></div>
+  <button class="reset" id="reset">New word</button>
+</main>
+<script>
+  const WORDS = [
+    "crane", "plant", "brisk", "flame", "grape", "wheel", "storm",
+    "chalk", "brave", "swirl", "trace", "quilt", "amber", "spice",
+    "pride", "cobra", "flint", "glide", "haste", "ivory", "juror",
+    "knead", "lemon", "mirth", "noble", "ocean", "pouch", "quest",
+    "reign", "sable"
+  ];
+
+  const ROWS = 6;
+  const LEN = 5;
+  const KEYS = [
+    "qwertyuiop".split(""),
+    "asdfghjkl".split(""),
+    ["enter", ..."zxcvbnm".split(""), "back"],
+  ];
+
+  let secret = "";
+  let row = 0;
+  let col = 0;
+  let guesses = [];
+  let over = false;
+  const keyState = {};
+
+  const board = document.getElementById("board");
+  const status = document.getElementById("status");
+  const keyboard = document.getElementById("keyboard");
+
+  function newGame() {
+    secret = WORDS[Math.floor(Math.random() * WORDS.length)];
+    row = 0;
+    col = 0;
+    guesses = Array.from({ length: ROWS }, () => Array(LEN).fill(""));
+    over = false;
+    Object.keys(keyState).forEach((k) => delete keyState[k]);
+    status.textContent = "Guess the 5-letter word";
+    renderBoard();
+    renderKeyboard();
+  }
+
+  function renderBoard() {
+    board.innerHTML = "";
+    for (let r = 0; r < ROWS; r++) {
+      const rowEl = document.createElement("div");
+      rowEl.className = "row";
+      for (let c = 0; c < LEN; c++) {
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        tile.textContent = guesses[r][c];
+        if (r < row) {
+          tile.classList.add(gradeAt(guesses[r], c));
+        }
+        rowEl.appendChild(tile);
+      }
+      board.appendChild(rowEl);
+    }
+  }
+
+  function gradeAt(guess, i) {
+    const letter = guess[i];
+    if (letter === secret[i]) return "hit";
+    if (secret.includes(letter)) return "present";
+    return "miss";
+  }
+
+  function renderKeyboard() {
+    keyboard.innerHTML = "";
+    KEYS.forEach((line) => {
+      const krow = document.createElement("div");
+      krow.className = "krow";
+      line.forEach((k) => {
+        const btn = document.createElement("button");
+        btn.className = "key" + (k.length > 1 ? " wide" : "");
+        if (keyState[k]) btn.classList.add(keyState[k]);
+        btn.textContent = k === "back" ? "⌫" : k === "enter" ? "Go" : k;
+        btn.addEventListener("click", () => handleKey(k));
+        krow.appendChild(btn);
+      });
+      keyboard.appendChild(krow);
+    });
+  }
+
+  function handleKey(k) {
+    if (over) return;
+    if (k === "back") {
+      if (col > 0) {
+        col--;
+        guesses[row][col] = "";
+        renderBoard();
+      }
+      return;
+    }
+    if (k === "enter") {
+      submitGuess();
+      return;
+    }
+    if (col < LEN) {
+      guesses[row][col] = k;
+      col++;
+      renderBoard();
+      const tiles = board.children[row].children;
+      tiles[col - 1].classList.add("pop");
+      setTimeout(() => tiles[col - 1].classList.remove("pop"), 150);
+    }
+  }
+
+  function submitGuess() {
+    if (col < LEN) {
+      status.textContent = "Not enough letters";
+      return;
+    }
+    const guess = guesses[row].join("");
+    for (let i = 0; i < LEN; i++) {
+      const grade = gradeAt(guesses[row], i);
+      const letter = guesses[row][i];
+      const rank = { miss: 0, present: 1, hit: 2 };
+      if (!keyState[letter] || rank[grade] > rank[keyState[letter]]) {
+        keyState[letter] = grade;
+      }
+    }
+    renderKeyboard();
+
+    if (guess === secret) {
+      status.textContent = `Solved in ${row + 1}/${ROWS} — nice.`;
+      over = true;
+      row++;
+      renderBoard();
+      return;
+    }
+
+    row++;
+    col = 0;
+    if (row === ROWS) {
+      status.textContent = `Out of tries — it was "${secret}"`;
+      over = true;
+    } else {
+      status.textContent = `${ROWS - row} guesses left`;
+    }
+    renderBoard();
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (over) return;
+    const k = e.key.toLowerCase();
+    if (k === "backspace") handleKey("back");
+    else if (k === "enter") handleKey("enter");
+    else if (/^[a-z]$/.test(k)) handleKey(k);
+  });
+
+  document.getElementById("reset").addEventListener("click", newGame);
+
+  newGame();
+</script>
+</body>
+</html>
