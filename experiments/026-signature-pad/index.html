@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>026 — Signature Pad</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .pad-wrap {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 1rem;
+    border: 1px solid #232a38;
+  }
+
+  canvas {
+    width: 100%;
+    aspect-ratio: 16 / 7;
+    display: block;
+    background: #0e1220;
+    border-radius: 8px;
+    touch-action: none;
+    cursor: crosshair;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  button {
+    background: transparent;
+    border: 1px solid #2a3245;
+    color: var(--text);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #06231f;
+    font-weight: 600;
+  }
+  button.primary:hover { color: #06231f; filter: brightness(1.1); }
+
+  label.swatch-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-left: auto;
+  }
+
+  input[type="color"] {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid #2a3245;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+  }
+
+  input[type="range"] { accent-color: var(--accent); }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>026 — Signature Pad</h1>
+  <p class="desc">
+    Pointer-events-driven canvas drawing with velocity-based line width
+    (faster strokes taper thinner, slow strokes stay bold) and a real
+    PNG export via <code>canvas.toBlob()</code>. Works with mouse, touch,
+    and stylus &mdash; try signing on a phone.
+  </p>
+  <div class="pad-wrap">
+    <canvas id="pad" width="1000" height="440"></canvas>
+    <div class="controls">
+      <button id="clear">Clear</button>
+      <button id="download" class="primary">Download PNG</button>
+      <label class="swatch-label">
+        Ink <input type="color" id="ink" value="#e6e9ef">
+      </label>
+    </div>
+  </div>
+</main>
+<script>
+  const canvas = document.getElementById("pad");
+  const ctx = canvas.getContext("2d");
+  const inkPicker = document.getElementById("ink");
+
+  let drawing = false;
+  let lastPoint = null;
+  let lastTime = 0;
+
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  }
+
+  function widthForVelocity(px, dt) {
+    const speed = dt > 0 ? px / dt : 0;
+    const w = 6 - Math.min(speed * 0.35, 4.5);
+    return Math.max(w, 1.2);
+  }
+
+  function start(e) {
+    drawing = true;
+    lastPoint = pointerPos(e);
+    lastTime = performance.now();
+    canvas.setPointerCapture(e.pointerId);
+  }
+
+  function move(e) {
+    if (!drawing) return;
+    const point = pointerPos(e);
+    const now = performance.now();
+    const dist = Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y);
+    const dt = now - lastTime;
+
+    ctx.strokeStyle = inkPicker.value;
+    ctx.lineWidth = widthForVelocity(dist, dt);
+    ctx.beginPath();
+    ctx.moveTo(lastPoint.x, lastPoint.y);
+    ctx.lineTo(point.x, point.y);
+    ctx.stroke();
+
+    lastPoint = point;
+    lastTime = now;
+  }
+
+  function end(e) {
+    drawing = false;
+    if (e.pointerId !== undefined) {
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
+    }
+  }
+
+  canvas.addEventListener("pointerdown", start);
+  canvas.addEventListener("pointermove", move);
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+
+  document.getElementById("clear").addEventListener("click", () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  });
+
+  document.getElementById("download").addEventListener("click", () => {
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "signature.png";
+      a.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  });
+</script>
+</body>
+</html>
