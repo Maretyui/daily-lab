@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>029 — CSS 3D Cube</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 46ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .scene {
+    --size: 160px;
+    width: 320px;
+    height: 320px;
+    max-width: 100%;
+    perspective: 900px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    cursor: grab;
+  }
+  .scene.dragging { cursor: grabbing; }
+
+  .cube {
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    transform-style: preserve-3d;
+    transform: rotateX(var(--rx, -20deg)) rotateY(var(--ry, -30deg));
+  }
+
+  .face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #06231f;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    backface-visibility: hidden;
+  }
+
+  .face.front  { background: #14b8a6; transform: translateZ(calc(var(--size) / 2)); }
+  .face.back   { background: #0d9488; transform: rotateY(180deg) translateZ(calc(var(--size) / 2)); }
+  .face.right  { background: #2dd4bf; transform: rotateY(90deg) translateZ(calc(var(--size) / 2)); }
+  .face.left   { background: #0f766e; transform: rotateY(-90deg) translateZ(calc(var(--size) / 2)); }
+  .face.top    { background: #5eead4; transform: rotateX(90deg) translateZ(calc(var(--size) / 2)); }
+  .face.bottom { background: #115e59; transform: rotateX(-90deg) translateZ(calc(var(--size) / 2)); }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  button {
+    background: var(--card);
+    border: 1px solid #2a3245;
+    color: var(--text);
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>029 — CSS 3D Cube</h1>
+  <p class="desc">
+    A real six-face cube built entirely from six absolutely-positioned
+    divs, <code>transform-style: preserve-3d</code>, and
+    <code>translateZ</code>/<code>rotate*</code> — no canvas, no WebGL.
+    It free-spins on its own; drag it to take over, release to hand
+    control back to auto-spin.
+  </p>
+  <div class="scene" id="scene">
+    <div class="cube" id="cube">
+      <div class="face front">FRONT</div>
+      <div class="face back">BACK</div>
+      <div class="face right">RIGHT</div>
+      <div class="face left">LEFT</div>
+      <div class="face top">TOP</div>
+      <div class="face bottom">BOTTOM</div>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="toggle" class="primary">Pause auto-spin</button>
+    <button id="reset">Reset angle</button>
+  </div>
+  <p class="hint">Drag anywhere on the cube to rotate it manually.</p>
+</main>
+<script>
+  const scene = document.getElementById("scene");
+  const cube = document.getElementById("cube");
+  const toggleBtn = document.getElementById("toggle");
+  const resetBtn = document.getElementById("reset");
+
+  let rx = -20;
+  let ry = -30;
+  let autoSpin = true;
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+  let velocityY = 0.35; // deg per frame while auto-spinning
+
+  function applyRotation() {
+    cube.style.setProperty("--rx", `${rx}deg`);
+    cube.style.setProperty("--ry", `${ry}deg`);
+  }
+
+  function frame() {
+    if (autoSpin && !dragging) {
+      ry += velocityY;
+      applyRotation();
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  scene.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    scene.classList.add("dragging");
+    lastX = e.clientX;
+    lastY = e.clientY;
+    scene.setPointerCapture(e.pointerId);
+  });
+
+  scene.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    ry += dx * 0.4;
+    rx -= dy * 0.4;
+    rx = Math.max(-90, Math.min(90, rx));
+    applyRotation();
+  });
+
+  function endDrag() {
+    dragging = false;
+    scene.classList.remove("dragging");
+  }
+  scene.addEventListener("pointerup", endDrag);
+  scene.addEventListener("pointercancel", endDrag);
+
+  toggleBtn.addEventListener("click", () => {
+    autoSpin = !autoSpin;
+    toggleBtn.textContent = autoSpin ? "Pause auto-spin" : "Resume auto-spin";
+  });
+
+  resetBtn.addEventListener("click", () => {
+    rx = -20;
+    ry = -30;
+    applyRotation();
+  });
+
+  applyRotation();
+</script>
+</body>
+</html>
