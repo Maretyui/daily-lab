@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>028 — Conway's Game of Life</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+    --grid-line: #1c2230;
+    --dead: #10141d;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 46ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  #board {
+    background: var(--dead);
+    border: 1px solid var(--grid-line);
+    border-radius: 10px;
+    touch-action: none;
+    cursor: crosshair;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  button {
+    background: var(--card);
+    border: 1px solid #2a3245;
+    color: var(--text);
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { border-color: var(--accent); color: var(--accent); }
+
+  .speed {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .speed input[type="range"] {
+    accent-color: var(--accent);
+  }
+
+  #stats {
+    color: var(--muted);
+    font-size: 0.85rem;
+    min-height: 1.2rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>028 — Conway's Game of Life</h1>
+  <p class="desc">
+    Click or drag on the grid to toggle cells, then hit play. Standard
+    B3/S23 rules, wrapping edges (a glider that walks off one side comes
+    back on the other). Runs on a plain 2D canvas, no libraries.
+  </p>
+  <canvas id="board" width="640" height="360"></canvas>
+  <div class="controls">
+    <button id="toggle" class="primary">Play</button>
+    <button id="step">Step</button>
+    <button id="random">Random</button>
+    <button id="glider">Gliders</button>
+    <button id="clear">Clear</button>
+    <label class="speed">
+      Speed
+      <input type="range" id="speed" min="1" max="30" value="10">
+    </label>
+  </div>
+  <div id="stats">Generation 0 · 0 live cells</div>
+</main>
+<script>
+  const canvas = document.getElementById("board");
+  const ctx = canvas.getContext("2d");
+  const CELL = 10;
+  const COLS = canvas.width / CELL;
+  const ROWS = canvas.height / CELL;
+
+  let grid = makeGrid();
+  let running = false;
+  let generation = 0;
+  let lastTick = 0;
+  let rafId = null;
+  let speed = 10; // generations per second
+
+  function makeGrid() {
+    return Array.from({ length: ROWS }, () => new Uint8Array(COLS));
+  }
+
+  function randomize() {
+    grid = makeGrid();
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        grid[r][c] = Math.random() < 0.22 ? 1 : 0;
+      }
+    }
+    generation = 0;
+    draw();
+  }
+
+  function clearGrid() {
+    grid = makeGrid();
+    generation = 0;
+    draw();
+  }
+
+  function seedGliders() {
+    grid = makeGrid();
+    const glider = [
+      [0, 1], [1, 2], [2, 0], [2, 1], [2, 2],
+    ];
+    const spots = [
+      [2, 2], [2, COLS - 8], [ROWS - 8, 2], [ROWS - 8, COLS - 8],
+    ];
+    spots.forEach(([or, oc]) => {
+      glider.forEach(([dr, dc]) => {
+        grid[(or + dr) % ROWS][(oc + dc) % COLS] = 1;
+      });
+    });
+    generation = 0;
+    draw();
+  }
+
+  function countNeighbors(r, c) {
+    let count = 0;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = (r + dr + ROWS) % ROWS;
+        const nc = (c + dc + COLS) % COLS;
+        count += grid[nr][nc];
+      }
+    }
+    return count;
+  }
+
+  function step() {
+    const next = makeGrid();
+    let live = 0;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const n = countNeighbors(r, c);
+        const alive = grid[r][c] === 1;
+        const willLive = alive ? (n === 2 || n === 3) : n === 3;
+        next[r][c] = willLive ? 1 : 0;
+        if (willLive) live++;
+      }
+    }
+    grid = next;
+    generation++;
+    draw(live);
+  }
+
+  function draw(liveOverride) {
+    ctx.fillStyle = "#10141d";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let live = 0;
+    ctx.fillStyle = "#14b8a6";
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (grid[r][c]) {
+          live++;
+          ctx.fillRect(c * CELL, r * CELL, CELL - 1, CELL - 1);
+        }
+      }
+    }
+
+    ctx.strokeStyle = "#1c2230";
+    ctx.lineWidth = 1;
+    for (let c = 0; c <= COLS; c++) {
+      ctx.beginPath();
+      ctx.moveTo(c * CELL, 0);
+      ctx.lineTo(c * CELL, canvas.height);
+      ctx.stroke();
+    }
+    for (let r = 0; r <= ROWS; r++) {
+      ctx.beginPath();
+      ctx.moveTo(0, r * CELL);
+      ctx.lineTo(canvas.width, r * CELL);
+      ctx.stroke();
+    }
+
+    document.getElementById("stats").textContent =
+      `Generation ${generation} · ${liveOverride ?? live} live cells`;
+  }
+
+  function loop(ts) {
+    if (!running) return;
+    const interval = 1000 / speed;
+    if (ts - lastTick >= interval) {
+      lastTick = ts;
+      step();
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function setRunning(next) {
+    running = next;
+    const btn = document.getElementById("toggle");
+    btn.textContent = running ? "Pause" : "Play";
+    if (running) {
+      lastTick = 0;
+      rafId = requestAnimationFrame(loop);
+    } else if (rafId) {
+      cancelAnimationFrame(rafId);
+    }
+  }
+
+  function cellFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    const c = Math.floor(x / CELL);
+    const r = Math.floor(y / CELL);
+    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
+    return [r, c];
+  }
+
+  let painting = false;
+  let paintValue = 1;
+
+  canvas.addEventListener("pointerdown", (e) => {
+    const cell = cellFromEvent(e);
+    if (!cell) return;
+    painting = true;
+    paintValue = grid[cell[0]][cell[1]] ? 0 : 1;
+    grid[cell[0]][cell[1]] = paintValue;
+    draw();
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener("pointermove", (e) => {
+    if (!painting) return;
+    const cell = cellFromEvent(e);
+    if (!cell) return;
+    grid[cell[0]][cell[1]] = paintValue;
+    draw();
+  });
+
+  canvas.addEventListener("pointerup", () => { painting = false; });
+  canvas.addEventListener("pointercancel", () => { painting = false; });
+
+  document.getElementById("toggle").addEventListener("click", () => setRunning(!running));
+  document.getElementById("step").addEventListener("click", () => { setRunning(false); step(); });
+  document.getElementById("random").addEventListener("click", () => { setRunning(false); randomize(); });
+  document.getElementById("glider").addEventListener("click", () => { setRunning(false); seedGliders(); });
+  document.getElementById("clear").addEventListener("click", () => { setRunning(false); clearGrid(); });
+  document.getElementById("speed").addEventListener("input", (e) => {
+    speed = Number(e.target.value);
+  });
+
+  seedGliders();
+</script>
+</body>
+</html>
