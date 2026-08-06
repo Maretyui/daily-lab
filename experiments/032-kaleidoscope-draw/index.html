@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>032 — Kaleidoscope Draw</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 46ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  canvas#scope {
+    width: 100%;
+    max-width: 420px;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: #000;
+    box-shadow: 0 0 0 4px var(--card), 0 8px 30px rgba(0, 0, 0, 0.5);
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  button {
+    background: var(--card);
+    border: 1px solid #2a3245;
+    color: var(--text);
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  input[type="range"] { accent-color: var(--accent); }
+  input[type="color"] {
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    border: 1px solid #2a3245;
+    border-radius: 8px;
+    background: var(--card);
+    cursor: pointer;
+  }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>032 — Kaleidoscope Draw</h1>
+  <p class="desc">
+    Draw with your pointer in one wedge and it's mirrored around the
+    center in real time — an even number of alternating true/flipped
+    reflections built purely with canvas <code>rotate()</code>/<code>scale(-1, 1)</code>
+    transforms, no image processing.
+  </p>
+  <canvas id="scope" width="420" height="420"></canvas>
+  <div class="controls">
+    <div class="field">
+      <label for="segments">Segments</label>
+      <input type="range" id="segments" min="4" max="16" step="2" value="8">
+    </div>
+    <div class="field">
+      <label for="color">Color</label>
+      <input type="color" id="color" value="#14b8a6">
+    </div>
+    <button id="clear">Clear</button>
+  </div>
+  <p class="hint">Drag inside the circle to draw. Change segment count any time.</p>
+</main>
+<script>
+  const canvas = document.getElementById("scope");
+  const ctx = canvas.getContext("2d");
+  const segmentsInput = document.getElementById("segments");
+  const colorInput = document.getElementById("color");
+  const clearBtn = document.getElementById("clear");
+
+  const size = canvas.width;
+  const center = size / 2;
+  let drawing = false;
+  let lastPoint = null;
+
+  function clear() {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, size, size);
+  }
+  clear();
+
+  function pointFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = size / rect.width;
+    const scaleY = size / rect.height;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  }
+
+  function drawSegment(x1, y1, x2, y2) {
+    const segments = parseInt(segmentsInput.value, 10);
+    const angleStep = (Math.PI * 2) / segments;
+    ctx.strokeStyle = colorInput.value;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+
+    for (let i = 0; i < segments; i++) {
+      ctx.save();
+      ctx.translate(center, center);
+      ctx.rotate(angleStep * i);
+      if (i % 2 === 1) ctx.scale(-1, 1); // mirror every other wedge
+      ctx.translate(-center, -center);
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    lastPoint = pointFromEvent(e);
+  }
+
+  function moveDraw(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const point = pointFromEvent(e);
+    drawSegment(lastPoint.x, lastPoint.y, point.x, point.y);
+    lastPoint = point;
+  }
+
+  function endDraw() {
+    drawing = false;
+    lastPoint = null;
+  }
+
+  canvas.addEventListener("pointerdown", startDraw);
+  canvas.addEventListener("pointermove", moveDraw);
+  window.addEventListener("pointerup", endDraw);
+  canvas.addEventListener("touchstart", startDraw, { passive: false });
+  canvas.addEventListener("touchmove", moveDraw, { passive: false });
+  window.addEventListener("touchend", endDraw);
+
+  clearBtn.addEventListener("click", clear);
+</script>
+</body>
+</html>
