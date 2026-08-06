@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>031 — Confetti Burst Button</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 46ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  canvas#confetti {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  button#burst {
+    background: var(--card);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 0.9rem 1.8rem;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform 0.15s ease;
+  }
+  button#burst:hover { transform: translateY(-2px); }
+  button#burst:active { transform: translateY(0) scale(0.97); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<canvas id="confetti"></canvas>
+<main>
+  <h1>031 — Confetti Burst Button</h1>
+  <p class="desc">
+    A plain canvas particle system — click the button and a burst of
+    rectangles launches from that point with real gravity, air drag, and
+    per-particle rotation, fading out and getting swept off the array once
+    they're offscreen or fully transparent. No library, one
+    <code>requestAnimationFrame</code> loop.
+  </p>
+  <div class="stage">
+    <button id="burst">🎉 Celebrate</button>
+    <p class="hint">Click as many times as you like — bursts stack.</p>
+  </div>
+</main>
+<script>
+  const canvas = document.getElementById("confetti");
+  const ctx = canvas.getContext("2d");
+  const burstBtn = document.getElementById("burst");
+  const colors = ["#14b8a6", "#0d9488", "#2dd4bf", "#5eead4", "#f43f5e", "#fbbf24", "#a78bfa"];
+
+  let particles = [];
+  let running = false;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  function spawnBurst(x, y) {
+    const count = 90;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 4 + Math.random() * 9;
+      particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 4,
+        rot: Math.random() * Math.PI * 2,
+        vrot: (Math.random() - 0.5) * 0.4,
+        w: 6 + Math.random() * 5,
+        h: 4 + Math.random() * 4,
+        color: colors[i % colors.length],
+        life: 1,
+        decay: 0.006 + Math.random() * 0.006,
+      });
+    }
+    if (!running) {
+      running = true;
+      requestAnimationFrame(tick);
+    }
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    particles = particles.filter((p) => p.life > 0 && p.y < canvas.height + 40);
+
+    for (const p of particles) {
+      p.vy += 0.18; // gravity
+      p.vx *= 0.99; // air drag
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vrot;
+      p.life -= p.decay;
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(p.life, 0);
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+
+    if (particles.length > 0) {
+      requestAnimationFrame(tick);
+    } else {
+      running = false;
+    }
+  }
+
+  burstBtn.addEventListener("click", () => {
+    const rect = burstBtn.getBoundingClientRect();
+    spawnBurst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  });
+</script>
+</body>
+</html>
