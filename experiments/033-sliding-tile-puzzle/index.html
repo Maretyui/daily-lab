@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>033 — Sliding Tile Puzzle</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 46ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 0.4rem;
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 1 / 1;
+    background: var(--card);
+    border-radius: 12px;
+    padding: 0.4rem;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1c2333;
+    border: 1px solid #2a3245;
+    border-radius: 8px;
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .tile:hover { background: #232b40; border-color: var(--accent); }
+  .tile.empty {
+    background: transparent;
+    border: none;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .status {
+    font-size: 0.9rem;
+    color: var(--muted);
+    min-height: 1.4em;
+  }
+  .status.won { color: var(--accent); font-weight: 600; }
+
+  .controls {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  button {
+    background: var(--card);
+    border: 1px solid #2a3245;
+    color: var(--text);
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>033 — Sliding Tile Puzzle</h1>
+  <p class="desc">
+    Classic 15-puzzle on a CSS grid — click any tile adjacent to the empty
+    slot to slide it in. The shuffle always walks backward from the solved
+    state with valid moves, so every puzzle is guaranteed solvable.
+  </p>
+  <div class="board" id="board"></div>
+  <p class="status" id="status">Moves: 0</p>
+  <div class="controls">
+    <button id="shuffle">Shuffle</button>
+  </div>
+  <p class="hint">Click a tile next to the gap to move it.</p>
+</main>
+<script>
+  const SIZE = 4;
+  const boardEl = document.getElementById("board");
+  const statusEl = document.getElementById("status");
+  const shuffleBtn = document.getElementById("shuffle");
+
+  let tiles = [];
+  let moves = 0;
+
+  function solvedState() {
+    const arr = [];
+    for (let i = 1; i < SIZE * SIZE; i++) arr.push(i);
+    arr.push(0); // 0 = empty slot
+    return arr;
+  }
+
+  function emptyIndex(state) {
+    return state.indexOf(0);
+  }
+
+  function neighbors(index) {
+    const row = Math.floor(index / SIZE);
+    const col = index % SIZE;
+    const result = [];
+    if (row > 0) result.push(index - SIZE);
+    if (row < SIZE - 1) result.push(index + SIZE);
+    if (col > 0) result.push(index - 1);
+    if (col < SIZE - 1) result.push(index + 1);
+    return result;
+  }
+
+  function shuffle() {
+    tiles = solvedState();
+    let empty = emptyIndex(tiles);
+    let lastEmpty = -1;
+    // Walk 200 random valid moves backward from solved so it's always solvable.
+    for (let i = 0; i < 200; i++) {
+      const options = neighbors(empty).filter((n) => n !== lastEmpty);
+      const next = options[Math.floor(Math.random() * options.length)];
+      [tiles[empty], tiles[next]] = [tiles[next], tiles[empty]];
+      lastEmpty = empty;
+      empty = next;
+    }
+    moves = 0;
+    render();
+  }
+
+  function isSolved() {
+    const solved = solvedState();
+    return tiles.every((v, i) => v === solved[i]);
+  }
+
+  function render() {
+    boardEl.innerHTML = "";
+    tiles.forEach((value, index) => {
+      const div = document.createElement("div");
+      if (value === 0) {
+        div.className = "tile empty";
+      } else {
+        div.className = "tile";
+        div.textContent = value;
+        div.addEventListener("click", () => tryMove(index));
+      }
+      boardEl.appendChild(div);
+    });
+
+    if (isSolved()) {
+      statusEl.textContent = `Solved in ${moves} moves!`;
+      statusEl.classList.add("won");
+    } else {
+      statusEl.textContent = `Moves: ${moves}`;
+      statusEl.classList.remove("won");
+    }
+  }
+
+  function tryMove(index) {
+    const empty = emptyIndex(tiles);
+    if (!neighbors(empty).includes(index)) return;
+    [tiles[empty], tiles[index]] = [tiles[index], tiles[empty]];
+    moves++;
+    render();
+  }
+
+  shuffleBtn.addEventListener("click", shuffle);
+  shuffle();
+</script>
+</body>
+</html>
