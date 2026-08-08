@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>035 — Split-Flap Display</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+    --flap: #12151c;
+    --flap-text: #ffcf5c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 50ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .board {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 1.25rem;
+    background: rgba(21, 26, 36, 0.85);
+    border: 1px solid #2a3245;
+    border-radius: 14px;
+  }
+
+  .cell {
+    position: relative;
+    width: 34px;
+    height: 48px;
+    border-radius: 4px;
+    background: var(--flap);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+    perspective: 220px;
+  }
+
+  .cell::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    background: rgba(0, 0, 0, 0.6);
+    transform: translateY(-1px);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .static,
+  .flipper .face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Courier New", monospace;
+    font-weight: 700;
+    font-size: 1.4rem;
+    color: var(--flap-text);
+    border-radius: 4px;
+  }
+
+  .flipper {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    transform: rotateX(0deg);
+  }
+
+  .flipper .face {
+    background: var(--flap);
+    backface-visibility: hidden;
+  }
+
+  .flipper .face.back {
+    transform: rotateX(180deg);
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    justify-content: center;
+  }
+
+  input[type="text"] {
+    background: var(--card);
+    border: 1px solid #2a3245;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.9rem;
+    width: 220px;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  button {
+    background: var(--card);
+    border: 1px solid #2a3245;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>035 — Split-Flap Display</h1>
+  <p class="desc">
+    An airport/train departure-board flip effect. Each cell can only rotate
+    forward through its character set, one flap at a time, exactly like the
+    real mechanical thing — so changing a letter always spins through
+    everything in between.
+  </p>
+  <div class="board" id="board"></div>
+  <div class="controls">
+    <input type="text" id="textInput" maxlength="16" value="DAILY LAB" aria-label="Text to display">
+    <button id="setBtn">Flip to text</button>
+    <button id="randomBtn">Random message</button>
+  </div>
+  <p class="hint">Cells that don't need to change stay put — only real differences flip.</p>
+</main>
+<script>
+  const CHARSET = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?'-";
+  const BOARD_LENGTH = 14;
+  const board = document.getElementById("board");
+  const textInput = document.getElementById("textInput");
+  const setBtn = document.getElementById("setBtn");
+  const randomBtn = document.getElementById("randomBtn");
+
+  const MESSAGES = [
+    "NOW BOARDING",
+    "ON TIME",
+    "DELAYED",
+    "GATE B12",
+    "FINAL CALL",
+    "WELCOME",
+    "TRACK 7",
+    "EXP 035",
+  ];
+
+  const cells = [];
+  const states = [];
+
+  for (let i = 0; i < BOARD_LENGTH; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerHTML = `
+      <div class="static"> </div>
+      <div class="flipper">
+        <div class="face front"> </div>
+        <div class="face back"> </div>
+      </div>
+    `;
+    board.appendChild(cell);
+    cells.push(cell);
+    states.push({ current: " ", busy: false });
+  }
+
+  function normalize(text) {
+    const upper = text.toUpperCase();
+    let out = "";
+    for (let i = 0; i < BOARD_LENGTH; i++) {
+      const ch = upper[i] || " ";
+      out += CHARSET.includes(ch) ? ch : " ";
+    }
+    return out;
+  }
+
+  function flipStep(cell, fromChar, toChar) {
+    return new Promise((resolve) => {
+      const front = cell.querySelector(".face.front");
+      const back = cell.querySelector(".face.back");
+      const staticEl = cell.querySelector(".static");
+      const flipper = cell.querySelector(".flipper");
+
+      front.textContent = fromChar;
+      back.textContent = toChar;
+
+      flipper.style.transition = "none";
+      flipper.style.transform = "rotateX(0deg)";
+      void flipper.offsetWidth;
+      flipper.style.transition = "transform 0.11s cubic-bezier(.4,0,.2,1)";
+      flipper.style.transform = "rotateX(-180deg)";
+
+      flipper.addEventListener(
+        "transitionend",
+        function onEnd(e) {
+          if (e.propertyName !== "transform") return;
+          flipper.removeEventListener("transitionend", onEnd);
+          staticEl.textContent = toChar;
+          resolve();
+        },
+        { once: true }
+      );
+    });
+  }
+
+  async function flipCellTo(index, targetChar) {
+    const state = states[index];
+    const cell = cells[index];
+    if (state.current === targetChar) return;
+    state.busy = true;
+    let currentIdx = CHARSET.indexOf(state.current);
+    const targetIdx = CHARSET.indexOf(targetChar);
+    while (CHARSET[currentIdx] !== targetChar) {
+      const nextIdx = (currentIdx + 1) % CHARSET.length;
+      const nextChar = CHARSET[nextIdx];
+      await flipStep(cell, CHARSET[currentIdx], nextChar);
+      state.current = nextChar;
+      currentIdx = nextIdx;
+    }
+    state.busy = false;
+  }
+
+  function setText(text) {
+    const normalized = normalize(text);
+    for (let i = 0; i < BOARD_LENGTH; i++) {
+      const target = normalized[i];
+      setTimeout(() => flipCellTo(i, target), i * 45);
+    }
+  }
+
+  setBtn.addEventListener("click", () => setText(textInput.value));
+  textInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") setText(textInput.value);
+  });
+  randomBtn.addEventListener("click", () => {
+    const msg = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
+    textInput.value = msg;
+    setText(msg);
+  });
+
+  setText(textInput.value);
+</script>
+</body>
+</html>
