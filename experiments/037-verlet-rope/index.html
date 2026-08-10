@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>037 — Verlet Rope</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 50ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .stage {
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 4 / 3;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    touch-action: none;
+    cursor: grab;
+  }
+  .stage:active { cursor: grabbing; }
+
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>037 — Verlet Rope</h1>
+  <p class="desc">
+    A hanging rope made of point masses connected by distance constraints,
+    solved each frame with plain Verlet integration — no velocity vectors,
+    just "previous position" and constraint relaxation. Drag the free end.
+  </p>
+  <div class="stage">
+    <canvas id="c"></canvas>
+  </div>
+  <p class="hint">Click and drag the rope's loose end. Release to let it swing.</p>
+</main>
+<script>
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const stage = canvas.parentElement;
+
+  const SEGMENTS = 24;
+  const GRAVITY = 0.5;
+  const CONSTRAINT_ITERATIONS = 8;
+  const DAMPING = 0.995;
+
+  let points = [];
+  let segmentLength = 12;
+  let anchor = { x: 0, y: 0 };
+  let width = 0, height = 0, dpr = 1;
+
+  let dragging = null; // index of point being dragged
+  let dragPos = null;
+
+  function resize() {
+    const rect = stage.getBoundingClientRect();
+    dpr = window.devicePixelRatio || 1;
+    width = rect.width;
+    height = rect.height;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    segmentLength = height / (SEGMENTS * 1.3);
+    init();
+  }
+
+  function init() {
+    anchor = { x: width * 0.5, y: height * 0.12 };
+    points = [];
+    for (let i = 0; i < SEGMENTS; i++) {
+      const y = anchor.y + i * segmentLength;
+      points.push({ x: anchor.x, y, px: anchor.x, py: y, pinned: i === 0 });
+    }
+  }
+
+  function step() {
+    for (const p of points) {
+      if (p.pinned) continue;
+      const vx = (p.x - p.px) * DAMPING;
+      const vy = (p.y - p.py) * DAMPING;
+      p.px = p.x;
+      p.py = p.y;
+      p.x += vx;
+      p.y += vy + GRAVITY;
+    }
+
+    if (dragging !== null && dragPos) {
+      points[dragging].x = dragPos.x;
+      points[dragging].y = dragPos.y;
+    }
+
+    for (let iter = 0; iter < CONSTRAINT_ITERATIONS; iter++) {
+      for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i];
+        const b = points[i + 1];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+        const diff = (dist - segmentLength) / dist;
+        const offX = dx * 0.5 * diff;
+        const offY = dy * 0.5 * diff;
+
+        if (!a.pinned && !(dragging === i)) { a.x += offX; a.y += offY; }
+        if (!b.pinned && !(dragging === i + 1)) { b.x -= offX; b.y -= offY; }
+      }
+      points[0].x = anchor.x;
+      points[0].y = anchor.y;
+      if (dragging !== null && dragPos) {
+        points[dragging].x = dragPos.x;
+        points[dragging].y = dragPos.y;
+      }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.strokeStyle = "#14b8a6";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.stroke();
+
+    ctx.fillStyle = "#8b93a7";
+    ctx.beginPath();
+    ctx.arc(anchor.x, anchor.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    const tail = points[points.length - 1];
+    ctx.fillStyle = "#e6e9ef";
+    ctx.beginPath();
+    ctx.arc(tail.x, tail.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function loop() {
+    step();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function toLocal(e) {
+    const rect = stage.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function pointerDown(e) {
+    const pos = toLocal(e);
+    let nearest = -1;
+    let best = Infinity;
+    points.forEach((p, i) => {
+      if (p.pinned) return;
+      const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+      if (d < best) { best = d; nearest = i; }
+    });
+    if (nearest !== -1) {
+      dragging = nearest;
+      dragPos = pos;
+    }
+  }
+
+  function pointerMove(e) {
+    if (dragging === null) return;
+    dragPos = toLocal(e);
+  }
+
+  function pointerUp() {
+    dragging = null;
+    dragPos = null;
+  }
+
+  stage.addEventListener("mousedown", pointerDown);
+  window.addEventListener("mousemove", pointerMove);
+  window.addEventListener("mouseup", pointerUp);
+  stage.addEventListener("touchstart", (e) => { pointerDown(e); e.preventDefault(); }, { passive: false });
+  window.addEventListener("touchmove", (e) => { pointerMove(e); e.preventDefault(); }, { passive: false });
+  window.addEventListener("touchend", pointerUp);
+
+  window.addEventListener("resize", resize);
+  resize();
+  loop();
+</script>
+</body>
+</html>
