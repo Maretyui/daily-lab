@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>040 — Slingshot Physics</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 50ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .stage {
+    width: 100%;
+    max-width: 640px;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    padding: 1rem;
+  }
+
+  canvas {
+    width: 100%;
+    height: 380px;
+    display: block;
+    touch-action: none;
+    border-radius: 8px;
+    background: #0e131d;
+  }
+
+  .row {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .row strong { color: var(--accent); }
+
+  button {
+    background: #1c2333;
+    border: 1px solid #2a3245;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>040 — Slingshot Physics</h1>
+  <p class="desc">
+    Drag the ball away from its anchor to stretch an elastic band, then
+    release to launch it. Gravity and simple wall/floor bounces take over
+    once it's flying — no physics library, just Hooke's law on release and
+    Euler integration per frame.
+  </p>
+  <div class="stage">
+    <canvas id="canvas"></canvas>
+  </div>
+  <div class="row">
+    <span>Launches: <strong id="launchCount">0</strong></span>
+    <span>Best distance: <strong id="bestDist">0</strong>px</span>
+  </div>
+  <button id="resetBtn">Reset Ball</button>
+  <p class="hint">Drag the ball, pull back, let go.</p>
+</main>
+
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const launchCountEl = document.getElementById("launchCount");
+  const bestDistEl = document.getElementById("bestDist");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  let width = 0, height = 0;
+  let anchor = { x: 0, y: 0 };
+  const MAX_STRETCH = 130;
+  const RADIUS = 14;
+  const GRAVITY = 0.55;
+  const RESTITUTION = 0.72;
+  const FRICTION = 0.998;
+
+  let ball = { x: 0, y: 0, vx: 0, vy: 0 };
+  let dragging = false;
+  let launched = false;
+  let launches = 0;
+  let bestDist = 0;
+  let launchOrigin = { x: 0, y: 0 };
+
+  function resize() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    width = rect.width - 32;
+    height = 380;
+    canvas.width = width * DPR;
+    canvas.height = height * DPR;
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    anchor = { x: width * 0.28, y: height - 60 };
+    resetBall();
+  }
+
+  function resetBall() {
+    ball = { x: anchor.x, y: anchor.y, vx: 0, vy: 0 };
+    launched = false;
+  }
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function clampToRadius(p, center, maxDist) {
+    const dx = p.x - center.x;
+    const dy = p.y - center.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= maxDist) return p;
+    const scale = maxDist / dist;
+    return { x: center.x + dx * scale, y: center.y + dy * scale };
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (launched) return;
+    const p = pointerPos(e);
+    if (Math.hypot(p.x - ball.x, p.y - ball.y) < RADIUS * 3) {
+      dragging = true;
+    }
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const p = pointerPos(e);
+    const clamped = clampToRadius(p, anchor, MAX_STRETCH);
+    ball.x = clamped.x;
+    ball.y = clamped.y;
+  });
+
+  window.addEventListener("pointerup", () => {
+    if (!dragging) return;
+    dragging = false;
+    const dx = anchor.x - ball.x;
+    const dy = anchor.y - ball.y;
+    const power = 0.18;
+    ball.vx = dx * power;
+    ball.vy = dy * power;
+    launched = true;
+    launches += 1;
+    launchOrigin = { x: ball.x, y: ball.y };
+    launchCountEl.textContent = launches;
+  });
+
+  resetBtn.addEventListener("click", resetBall);
+
+  function step() {
+    if (launched) {
+      ball.vy += GRAVITY;
+      ball.vx *= FRICTION;
+      ball.vy *= FRICTION;
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      if (ball.x - RADIUS < 0) { ball.x = RADIUS; ball.vx *= -RESTITUTION; }
+      if (ball.x + RADIUS > width) { ball.x = width - RADIUS; ball.vx *= -RESTITUTION; }
+      if (ball.y + RADIUS > height) {
+        ball.y = height - RADIUS;
+        ball.vy *= -RESTITUTION;
+        const dist = Math.round(Math.hypot(ball.x - launchOrigin.x, ball.y - launchOrigin.y));
+        if (dist > bestDist) {
+          bestDist = dist;
+          bestDistEl.textContent = bestDist;
+        }
+      }
+      if (ball.y - RADIUS < 0) { ball.y = RADIUS; ball.vy *= -RESTITUTION; }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Floor line.
+    ctx.strokeStyle = "#2a3245";
+    ctx.beginPath();
+    ctx.moveTo(0, height - 1);
+    ctx.lineTo(width, height - 1);
+    ctx.stroke();
+
+    if (!launched) {
+      ctx.strokeStyle = "#3a445c";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(anchor.x - 22, anchor.y);
+      ctx.lineTo(ball.x, ball.y);
+      ctx.moveTo(anchor.x + 22, anchor.y);
+      ctx.lineTo(ball.x, ball.y);
+      ctx.stroke();
+
+      ctx.fillStyle = "#3a445c";
+      ctx.beginPath();
+      ctx.arc(anchor.x - 22, anchor.y, 4, 0, Math.PI * 2);
+      ctx.arc(anchor.x + 22, anchor.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = "#14b8a6";
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function frame() {
+    step();
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
