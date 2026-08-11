@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>039 — Particle Text Dissolve</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 50ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .stage {
+    width: 100%;
+    max-width: 640px;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    padding: 1rem;
+  }
+
+  canvas {
+    width: 100%;
+    height: 220px;
+    display: block;
+    cursor: pointer;
+    touch-action: none;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    align-items: center;
+  }
+
+  input[type="text"] {
+    background: var(--card);
+    border: 1px solid #2a3245;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.55rem 0.8rem;
+    font-size: 0.95rem;
+    width: 220px;
+  }
+  input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  button {
+    background: #1c2333;
+    border: 1px solid #2a3245;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>039 — Particle Text Dissolve</h1>
+  <p class="desc">
+    Text is sampled off an offscreen canvas into a grid of particles, each
+    one remembering its home position. Click or drag across the text to
+    scatter nearby particles outward; released particles ease back home
+    on their own.
+  </p>
+  <div class="stage">
+    <canvas id="canvas"></canvas>
+  </div>
+  <div class="controls">
+    <input type="text" id="textInput" value="DISSOLVE" maxlength="16" aria-label="Text to render">
+    <button id="renderBtn">Render</button>
+    <button id="resetBtn">Snap Back</button>
+  </div>
+  <p class="hint">Click and drag over the letters to blow them apart.</p>
+</main>
+
+<script>
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+  const textInput = document.getElementById("textInput");
+  const renderBtn = document.getElementById("renderBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const STEP = 4;
+  let particles = [];
+  let width = 0, height = 0;
+
+  function resize() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    width = rect.width - 32;
+    height = 220;
+    canvas.width = width * DPR;
+    canvas.height = height * DPR;
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  function sampleText(str) {
+    const off = document.createElement("canvas");
+    off.width = width;
+    off.height = height;
+    const octx = off.getContext("2d");
+    octx.fillStyle = "#fff";
+    octx.font = `bold ${Math.min(height * 0.55, width / (str.length * 0.62))}px system-ui, sans-serif`;
+    octx.textAlign = "center";
+    octx.textBaseline = "middle";
+    octx.fillText(str || " ", width / 2, height / 2);
+    const data = octx.getImageData(0, 0, width, height).data;
+
+    const pts = [];
+    for (let y = 0; y < height; y += STEP) {
+      for (let x = 0; x < width; x += STEP) {
+        const alpha = data[(y * width + x) * 4 + 3];
+        if (alpha > 128) pts.push({ x, y });
+      }
+    }
+    return pts;
+  }
+
+  function render(str) {
+    const pts = sampleText(str);
+    particles = pts.map((p) => ({
+      hx: p.x, hy: p.y,
+      x: p.x, y: p.y,
+      vx: 0, vy: 0,
+    }));
+  }
+
+  let pointer = { x: -999, y: -999, active: false };
+
+  function frame() {
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#14b8a6";
+
+    for (const p of particles) {
+      if (pointer.active) {
+        const dx = p.x - pointer.x;
+        const dy = p.y - pointer.y;
+        const dist = Math.hypot(dx, dy);
+        const radius = 46;
+        if (dist < radius && dist > 0.01) {
+          const force = (1 - dist / radius) * 6;
+          p.vx += (dx / dist) * force;
+          p.vy += (dy / dist) * force;
+        }
+      }
+      // Ease back toward home, damp velocity.
+      p.vx += (p.hx - p.x) * 0.02;
+      p.vy += (p.hy - p.y) * 0.02;
+      p.vx *= 0.9;
+      p.vy *= 0.9;
+      p.x += p.vx;
+      p.y += p.vy;
+
+      ctx.fillRect(p.x, p.y, 2, 2);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    pointer.active = true;
+    const p = pointerPos(e);
+    pointer.x = p.x;
+    pointer.y = p.y;
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!pointer.active) return;
+    const p = pointerPos(e);
+    pointer.x = p.x;
+    pointer.y = p.y;
+  });
+  window.addEventListener("pointerup", () => { pointer.active = false; });
+
+  renderBtn.addEventListener("click", () => render(textInput.value.toUpperCase()));
+  resetBtn.addEventListener("click", () => render(textInput.value.toUpperCase()));
+  textInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") render(textInput.value.toUpperCase());
+  });
+
+  window.addEventListener("resize", () => {
+    resize();
+    render(textInput.value.toUpperCase());
+  });
+
+  resize();
+  render(textInput.value.toUpperCase());
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
