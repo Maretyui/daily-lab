@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>041 — Magnetic Buttons</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 50ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .stage {
+    width: 100%;
+    max-width: 640px;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    padding: 3rem 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+  }
+
+  .magnet {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .magnet button {
+    background: #1c2333;
+    border: 1px solid #2a3245;
+    color: var(--text);
+    border-radius: 999px;
+    padding: 0.9rem 1.75rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    will-change: transform;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+
+  .magnet button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #182028;
+  }
+
+  .row {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  label { display: flex; align-items: center; gap: 0.5rem; }
+  input[type="range"] { accent-color: var(--accent); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>041 — Magnetic Buttons</h1>
+  <p class="desc">
+    Each button tracks the cursor while it's within a fixed pull radius and
+    eases its own position toward it, snapping back to zero once the cursor
+    leaves — no libraries, just a per-frame lerp toward a target offset
+    computed from cursor distance.
+  </p>
+  <div class="stage" id="stage">
+    <div class="magnet"><button>Hover me</button></div>
+    <div class="magnet"><button>And me</button></div>
+    <div class="magnet"><button>Also me</button></div>
+    <div class="magnet"><button>One more</button></div>
+  </div>
+  <div class="row">
+    <label>Pull radius <input id="radius" type="range" min="40" max="200" value="110"></label>
+    <label>Strength <input id="strength" type="range" min="0.1" max="0.9" step="0.05" value="0.45"></label>
+  </div>
+  <p class="hint">Move the cursor near a button and watch it lean toward you.</p>
+</main>
+
+<script>
+  const stage = document.getElementById("stage");
+  const magnets = Array.from(document.querySelectorAll(".magnet"));
+  const radiusInput = document.getElementById("radius");
+  const strengthInput = document.getElementById("strength");
+
+  const state = magnets.map(() => ({ x: 0, y: 0, tx: 0, ty: 0 }));
+  let pointer = { x: -9999, y: -9999 };
+
+  window.addEventListener("pointermove", (e) => {
+    pointer.x = e.clientX;
+    pointer.y = e.clientY;
+  });
+
+  window.addEventListener("pointerleave", () => {
+    pointer.x = -9999;
+    pointer.y = -9999;
+  });
+
+  function frame() {
+    const radius = Number(radiusInput.value);
+    const strength = Number(strengthInput.value);
+
+    magnets.forEach((el, i) => {
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = pointer.x - cx;
+      const dy = pointer.y - cy;
+      const dist = Math.hypot(dx, dy);
+
+      const s = state[i];
+      if (dist < radius) {
+        const pull = 1 - dist / radius;
+        s.tx = dx * pull * strength;
+        s.ty = dy * pull * strength;
+      } else {
+        s.tx = 0;
+        s.ty = 0;
+      }
+
+      s.x += (s.tx - s.x) * 0.18;
+      s.y += (s.ty - s.y) * 0.18;
+
+      el.querySelector("button").style.transform =
+        `translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px)`;
+    });
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
