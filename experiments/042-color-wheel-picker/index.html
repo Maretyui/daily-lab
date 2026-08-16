@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>042 — Color Wheel Picker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  p.desc {
+    margin: 0;
+    max-width: 50ch;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .stage {
+    width: 100%;
+    max-width: 460px;
+    background: var(--card);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  #wheel {
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    position: relative;
+    touch-action: none;
+    background: conic-gradient(
+      from 90deg,
+      hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%),
+      hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%)
+    );
+    box-shadow: inset 0 0 0 3px #0e131d;
+  }
+
+  #wheel::after {
+    content: "";
+    position: absolute;
+    inset: 32%;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff 0%, transparent 70%);
+    opacity: 0.9;
+    pointer-events: none;
+  }
+
+  #cursor {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    margin: -8px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+  }
+
+  .swatch-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  #swatch {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    border: 1px solid #2a3245;
+  }
+
+  .values {
+    text-align: left;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  .values strong { color: var(--text); }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>042 — Color Wheel Picker</h1>
+  <p class="desc">
+    A pure CSS conic-gradient hue wheel with a radial white-to-transparent
+    overlay for saturation/lightness. Pointer position on the disc is
+    converted to polar coordinates, giving hue from the angle and
+    saturation from the distance from center.
+  </p>
+  <div class="stage">
+    <div id="wheel">
+      <div id="cursor"></div>
+    </div>
+    <div class="swatch-row">
+      <div id="swatch"></div>
+      <div class="values">
+        <div>HSL: <strong id="hslOut">hsl(0, 100%, 75%)</strong></div>
+        <div>HEX: <strong id="hexOut">#ffffff</strong></div>
+      </div>
+    </div>
+  </div>
+  <p class="hint">Click or drag inside the wheel to pick a color.</p>
+</main>
+
+<script>
+  const wheel = document.getElementById("wheel");
+  const cursor = document.getElementById("cursor");
+  const swatch = document.getElementById("swatch");
+  const hslOut = document.getElementById("hslOut");
+  const hexOut = document.getElementById("hexOut");
+
+  function hslToHex(h, s, l) {
+    s /= 100; l /= 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const toHex = (x) => Math.round(255 * x).toString(16).padStart(2, "0");
+    return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
+  }
+
+  function setColor(h, s, l, px, py) {
+    const hsl = `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
+    swatch.style.background = hsl;
+    hslOut.textContent = hsl;
+    hexOut.textContent = hslToHex(h, s, l);
+    cursor.style.left = px + "px";
+    cursor.style.top = py + "px";
+  }
+
+  function pick(e) {
+    const rect = wheel.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const x = clientX - rect.left - cx;
+    const y = clientY - rect.top - cy;
+
+    const dist = Math.min(Math.hypot(x, y), cx);
+    const angle = (Math.atan2(y, x) * 180) / Math.PI;
+    const hue = (angle + 360 + 90) % 360;
+    const saturation = 100;
+    const distRatio = dist / cx;
+    const lightness = 100 - distRatio * 50;
+
+    const px = cx + Math.cos((angle * Math.PI) / 180) * dist;
+    const py = cy + Math.sin((angle * Math.PI) / 180) * dist;
+
+    setColor(hue, saturation, lightness, px, py);
+  }
+
+  let dragging = false;
+  wheel.addEventListener("pointerdown", (e) => { dragging = true; pick(e); });
+  window.addEventListener("pointermove", (e) => { if (dragging) pick(e); });
+  window.addEventListener("pointerup", () => { dragging = false; });
+
+  setColor(0, 100, 75, 130, 46);
+</script>
+</body>
+</html>
