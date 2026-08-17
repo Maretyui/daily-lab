@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>044 — Typewriter Queue</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
+
+  .stage {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: clamp(1.3rem, 4vw, 2rem);
+    min-height: 3em;
+    display: flex;
+    align-items: center;
+    color: var(--text);
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 0.5ch;
+    margin-left: 0.1ch;
+    background: var(--accent);
+    animation: blink 0.9s step-end infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  .queue {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 480px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Typewriter Queue — types, holds, backspaces, moves on</h1>
+  <div class="stage"><span id="text"></span><span class="cursor">&nbsp;</span></div>
+  <p class="queue">Plain JS state machine (type → hold → delete → next), no animation library. Respects <code>prefers-reduced-motion</code> by skipping straight to each full phrase.</p>
+</main>
+<script>
+  const phrases = [
+    'building small things daily',
+    'shipping ugly first drafts',
+    'learning in public',
+    'one commit at a time'
+  ];
+
+  const el = document.getElementById('text');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let phraseIndex = 0;
+  let charIndex = 0;
+  let deleting = false;
+
+  function tick() {
+    const current = phrases[phraseIndex];
+
+    if (reduceMotion) {
+      el.textContent = current;
+      phraseIndex = (phraseIndex + 1) % phrases.length;
+      setTimeout(tick, 1600);
+      return;
+    }
+
+    if (!deleting) {
+      charIndex++;
+      el.textContent = current.slice(0, charIndex);
+      if (charIndex === current.length) {
+        deleting = true;
+        setTimeout(tick, 1400);
+        return;
+      }
+      setTimeout(tick, 55 + Math.random() * 45);
+    } else {
+      charIndex--;
+      el.textContent = current.slice(0, charIndex);
+      if (charIndex === 0) {
+        deleting = false;
+        phraseIndex = (phraseIndex + 1) % phrases.length;
+        setTimeout(tick, 300);
+        return;
+      }
+      setTimeout(tick, 28);
+    }
+  }
+
+  tick();
+</script>
+</body>
+</html>
