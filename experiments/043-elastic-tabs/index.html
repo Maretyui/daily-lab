@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>043 — Elastic Tabs</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    padding: 2rem;
+  }
+
+  h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
+
+  .tabs {
+    position: relative;
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.35rem;
+    background: var(--card);
+    border-radius: 999px;
+    border: 1px solid #232a38;
+  }
+
+  .pill {
+    position: absolute;
+    top: 0.35rem;
+    left: 0.35rem;
+    height: calc(100% - 0.7rem);
+    border-radius: 999px;
+    background: var(--accent);
+    /* asymmetric ease: a quick lead-in overshoot then settle, faked with two custom cubic-beziers timed via transition */
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    z-index: 0;
+  }
+
+  button {
+    position: relative;
+    z-index: 1;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 0.6rem 1.1rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.3s;
+  }
+
+  button[aria-selected="true"] { color: #06231f; font-weight: 600; }
+
+  .panel {
+    width: min(420px, 90vw);
+    min-height: 4rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--card);
+    border: 1px solid #232a38;
+    border-radius: 0.75rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Elastic Tabs — click a tab, the pill overshoots then settles</h1>
+  <div class="tabs" role="tablist" id="tabs">
+    <div class="pill" id="pill"></div>
+    <button role="tab" aria-selected="true" data-panel="Stretches to fit each label's width and springs into place using a single cubic-bezier overshoot curve — no JS animation loop, just a CSS transition retriggered on click.">Overview</button>
+    <button role="tab" aria-selected="false" data-panel="Width and position are both read live from getBoundingClientRect() on the clicked button, so it works for any label length without hardcoded offsets.">Details</button>
+    <button role="tab" aria-selected="false" data-panel="Keyboard users can Tab to a button and press Enter/Space; focus-visible styling is left to the browser default outline, deliberately not suppressed.">Settings</button>
+  </div>
+  <div class="panel" id="panel">Stretches to fit each label's width and springs into place using a single cubic-bezier overshoot curve — no JS animation loop, just a CSS transition retriggered on click.</div>
+</main>
+<script>
+  const tabs = document.getElementById('tabs');
+  const pill = document.getElementById('pill');
+  const panel = document.getElementById('panel');
+  const buttons = [...tabs.querySelectorAll('button')];
+
+  function movePill(btn) {
+    const tabsRect = tabs.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const x = btnRect.left - tabsRect.left - 5.6;
+    pill.style.width = btnRect.width + 'px';
+    pill.style.transform = `translateX(${x}px)`;
+  }
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      buttons.forEach(b => b.setAttribute('aria-selected', 'false'));
+      btn.setAttribute('aria-selected', 'true');
+      movePill(btn);
+      panel.textContent = btn.dataset.panel;
+    });
+  });
+
+  window.addEventListener('resize', () => {
+    const active = buttons.find(b => b.getAttribute('aria-selected') === 'true');
+    movePill(active);
+  });
+
+  movePill(buttons[0]);
+</script>
+</body>
+</html>
