@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>046 — Ripple Dot Grid</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
+
+  canvas#grid {
+    border-radius: 16px;
+    background: var(--card);
+    touch-action: none;
+    cursor: pointer;
+  }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 420px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Ripple Dot Grid — pointer-driven wave through a dot field</h1>
+  <canvas id="grid" width="560" height="360"></canvas>
+  <p class="hint">Every dot's radius and opacity is offset by its distance from the pointer, animated with a sine wave that expands outward over time. Move or click inside the grid to trigger a fresh ripple.</p>
+</main>
+<script>
+  const canvas = document.getElementById('grid');
+  const ctx = canvas.getContext('2d');
+  const spacing = 24;
+  const baseRadius = 2;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let ripples = [];
+
+  function addRipple(x, y) {
+    ripples.push({ x, y, start: performance.now() });
+    if (ripples.length > 5) ripples.shift();
+  }
+
+  canvas.addEventListener('pointermove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    addRipple(e.clientX - rect.left, e.clientY - rect.top);
+  });
+  canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    addRipple(e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  function draw(now) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ripples = ripples.filter((r) => now - r.start < 1400);
+
+    for (let y = spacing / 2; y < canvas.height; y += spacing) {
+      for (let x = spacing / 2; x < canvas.width; x += spacing) {
+        let radius = baseRadius;
+        let alpha = 0.35;
+
+        if (!reduceMotion) {
+          ripples.forEach((r) => {
+            const age = now - r.start;
+            const dist = Math.hypot(x - r.x, y - r.y);
+            const wavefront = age * 0.35;
+            const band = Math.abs(dist - wavefront);
+            if (band < 40) {
+              const strength = (1 - band / 40) * Math.max(0, 1 - age / 1400);
+              radius += strength * 5;
+              alpha += strength * 0.6;
+            }
+          });
+        }
+
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(20, 184, 166, ${Math.min(alpha, 1)})`;
+        ctx.fill();
+      }
+    }
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+</script>
+</body>
+</html>
