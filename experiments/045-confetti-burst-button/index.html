@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>045 — Confetti Burst Button</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
+
+  button#burst {
+    position: relative;
+    z-index: 2;
+    padding: 0.9rem 1.8rem;
+    border: none;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #05221d;
+    font-size: 1.05rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+  }
+  button#burst:active { transform: scale(0.94); }
+
+  canvas#confetti {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 420px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<canvas id="confetti"></canvas>
+<main>
+  <h1>Confetti Burst Button — canvas particles, no library</h1>
+  <button id="burst">Click me</button>
+  <p class="hint">Each click spawns a burst of gravity-affected rectangles from the click point, drawn straight to a full-screen canvas and pruned once they fall off-frame or fully fade.</p>
+</main>
+<script>
+  const canvas = document.getElementById('confetti');
+  const ctx = canvas.getContext('2d');
+  const colors = ['#14b8a6', '#f97316', '#e879f9', '#60a5fa', '#facc15'];
+
+  let particles = [];
+  let width, height;
+
+  function resize() {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function spawn(x, y) {
+    const count = 60;
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 6;
+      particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 3,
+        size: 4 + Math.random() * 5,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * Math.PI,
+        spin: (Math.random() - 0.5) * 0.4,
+        life: 1,
+      });
+    }
+  }
+
+  function step() {
+    ctx.clearRect(0, 0, width, height);
+
+    particles.forEach((p) => {
+      p.vy += 0.18;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rotation += p.spin;
+      p.life -= 0.012;
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(p.life, 0);
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
+    });
+
+    particles = particles.filter((p) => p.life > 0 && p.y < height + 40);
+
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+
+  const button = document.getElementById('burst');
+  button.addEventListener('click', () => {
+    const rect = button.getBoundingClientRect();
+    spawn(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  });
+</script>
+</body>
+</html>
