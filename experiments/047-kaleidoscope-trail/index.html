@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>047 — Kaleidoscope Trail</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
+
+  canvas#stage {
+    border-radius: 16px;
+    background: var(--card);
+    touch-action: none;
+    cursor: crosshair;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .controls input[type="range"] {
+    accent-color: var(--accent);
+  }
+
+  button {
+    background: transparent;
+    border: 1px solid #262d3b;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  button:hover { color: var(--text); border-color: var(--accent); }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 420px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Kaleidoscope Trail — draw once, mirrored N times around the center</h1>
+  <canvas id="stage" width="560" height="420"></canvas>
+  <div class="controls">
+    <label for="segments">Segments</label>
+    <input type="range" id="segments" min="3" max="16" value="8">
+    <span id="segmentsValue">8</span>
+    <button id="clearBtn" type="button">Clear</button>
+  </div>
+  <p class="hint">Drag inside the canvas — every stroke is rotated and mirrored around the center to build a symmetric kaleidoscope pattern, canvas-only, no libraries.</p>
+</main>
+<script>
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const segmentsInput = document.getElementById('segments');
+  const segmentsValue = document.getElementById('segmentsValue');
+  const clearBtn = document.getElementById('clearBtn');
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+
+  let segments = Number(segmentsInput.value);
+  let drawing = false;
+  let last = null;
+  let hue = 170;
+
+  function fadeToBackground() {
+    ctx.fillStyle = 'rgba(21, 26, 36, 1)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  fadeToBackground();
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function drawSegment(from, to) {
+    const dx1 = from.x - cx, dy1 = from.y - cy;
+    const dx2 = to.x - cx, dy2 = to.y - cy;
+    const step = (Math.PI * 2) / segments;
+
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = `hsla(${hue}, 80%, 65%, 0.85)`;
+
+    for (let i = 0; i < segments; i++) {
+      const angle = step * i;
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+
+      // rotated copy
+      const p1 = { x: cx + dx1 * cos - dy1 * sin, y: cy + dx1 * sin + dy1 * cos };
+      const p2 = { x: cx + dx2 * cos - dy2 * sin, y: cy + dx2 * sin + dy2 * cos };
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+
+      // mirrored copy (flip across the rotated axis)
+      const m1 = { x: cx + dx1 * cos + dy1 * sin, y: cy + dx1 * sin - dy1 * cos };
+      const m2 = { x: cx + dx2 * cos + dy2 * sin, y: cy + dx2 * sin - dy2 * cos };
+      ctx.beginPath();
+      ctx.moveTo(m1.x, m1.y);
+      ctx.lineTo(m2.x, m2.y);
+      ctx.stroke();
+    }
+
+    hue = (hue + 0.6) % 360;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    drawing = true;
+    last = pointerPos(e);
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    const p = pointerPos(e);
+    drawSegment(last, p);
+    last = p;
+  });
+  window.addEventListener('pointerup', () => { drawing = false; last = null; });
+
+  segmentsInput.addEventListener('input', () => {
+    segments = Number(segmentsInput.value);
+    segmentsValue.textContent = String(segments);
+  });
+
+  clearBtn.addEventListener('click', fadeToBackground);
+</script>
+</body>
+</html>
