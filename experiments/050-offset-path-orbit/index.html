@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>050 — CSS offset-path Orbit</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+    --duration: 6s;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .stage {
+    position: relative;
+    width: 420px;
+    max-width: 90vw;
+    height: 320px;
+    border-radius: 16px;
+    background: var(--card);
+  }
+
+  svg.track {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  svg.track path {
+    fill: none;
+    stroke: #232a38;
+    stroke-width: 2;
+    stroke-dasharray: 4 6;
+  }
+
+  .rider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 14px rgba(20, 184, 166, 0.75);
+    offset-path: path("M 40 160 C 40 60, 160 20, 210 20 C 320 20, 380 90, 380 160 C 380 260, 260 300, 210 300 C 100 300, 40 260, 40 160 Z");
+    offset-rotate: 0deg;
+    animation: orbit var(--duration) linear infinite;
+  }
+
+  .rider.paused { animation-play-state: paused; }
+
+  @keyframes orbit {
+    0% { offset-distance: 0%; }
+    100% { offset-distance: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rider { animation-play-state: paused; offset-distance: 0%; }
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .controls button {
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--text);
+    background: #1d2330;
+    border: 1px solid #2a3242;
+    border-radius: 8px;
+    padding: 0.45rem 0.9rem;
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--accent); }
+
+  .controls input[type="range"] { accent-color: var(--accent); }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 440px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>CSS offset-path Orbit — a dot follows a hand-drawn SVG track, no JS animation loop</h1>
+  <div class="stage">
+    <svg class="track" viewBox="0 0 420 320" aria-hidden="true">
+      <path d="M 40 160 C 40 60, 160 20, 210 20 C 320 20, 380 90, 380 160 C 380 260, 260 300, 210 300 C 100 300, 40 260, 40 160 Z" />
+    </svg>
+    <div class="rider" id="rider"></div>
+  </div>
+  <div class="controls">
+    <button type="button" id="toggleBtn">Pause</button>
+    <label>Speed
+      <input type="range" id="speedRange" min="2" max="14" value="6" step="1">
+    </label>
+  </div>
+  <p class="hint">The dot's motion is pure CSS: <code>offset-path</code> pins it to the same path the track SVG draws, and a keyframe animation drives <code>offset-distance</code> from 0% to 100% on loop. JS here only toggles play state and the animation-duration custom property.</p>
+</main>
+<script>
+  const rider = document.getElementById('rider');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const speedRange = document.getElementById('speedRange');
+
+  let paused = false;
+  toggleBtn.addEventListener('click', () => {
+    paused = !paused;
+    rider.classList.toggle('paused', paused);
+    toggleBtn.textContent = paused ? 'Play' : 'Pause';
+  });
+
+  speedRange.addEventListener('input', () => {
+    // higher slider value = slower orbit, so invert into a duration in seconds
+    document.documentElement.style.setProperty('--duration', `${speedRange.value}s`);
+  });
+</script>
+</body>
+</html>
