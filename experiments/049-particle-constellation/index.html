@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>049 — Particle Constellation</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .stage {
+    position: relative;
+    width: min(90vw, 720px);
+    height: min(60vh, 420px);
+    border-radius: 16px;
+    background: var(--card);
+    overflow: hidden;
+  }
+
+  canvas#field {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 460px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .controls input[type="range"] {
+    accent-color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Particle Constellation — nearby dots link up, the cursor gently pushes them apart</h1>
+  <div class="stage">
+    <canvas id="field"></canvas>
+  </div>
+  <div class="controls">
+    <label>Link distance
+      <input type="range" id="linkRange" min="60" max="180" value="110">
+    </label>
+  </div>
+  <p class="hint">A field of drifting dots draws a line between any two that are close enough — line opacity fades with distance. Move the pointer over the field to repel nearby particles.</p>
+</main>
+<script>
+  const canvas = document.getElementById('field');
+  const ctx = canvas.getContext('2d');
+  const stage = canvas.parentElement;
+  const linkRange = document.getElementById('linkRange');
+
+  let width = 0, height = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let linkDistance = Number(linkRange.value);
+
+  function resize() {
+    const rect = stage.getBoundingClientRect();
+    width = rect.width;
+    height = rect.height;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  const COUNT = 70;
+  const particles = Array.from({ length: COUNT }, () => ({
+    x: Math.random(),
+    y: Math.random(),
+    vx: (Math.random() - 0.5) * 0.00035,
+    vy: (Math.random() - 0.5) * 0.00035,
+    r: 1.4 + Math.random() * 1.6,
+  }));
+
+  const pointer = { x: -9999, y: -9999, active: false };
+
+  function step() {
+    for (const p of particles) {
+      // gentle pointer repulsion, worked in normalized space
+      if (pointer.active) {
+        const dx = p.x * width - pointer.x;
+        const dy = p.y * height - pointer.y;
+        const dist = Math.hypot(dx, dy);
+        const radius = 90;
+        if (dist < radius && dist > 0.001) {
+          const force = (1 - dist / radius) * 0.0016;
+          p.vx += (dx / dist) * force;
+          p.vy += (dy / dist) * force;
+        }
+      }
+
+      p.x += p.vx;
+      p.y += p.vy;
+
+      // damping so pointer nudges decay instead of accumulating forever
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+
+      if (p.x < 0) { p.x = 0; p.vx *= -1; }
+      if (p.x > 1) { p.x = 1; p.vx *= -1; }
+      if (p.y < 0) { p.y = 0; p.vy *= -1; }
+      if (p.y > 1) { p.y = 1; p.vy *= -1; }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    for (let i = 0; i < particles.length; i++) {
+      const a = particles[i];
+      const ax = a.x * width, ay = a.y * height;
+      for (let j = i + 1; j < particles.length; j++) {
+        const b = particles[j];
+        const bx = b.x * width, by = b.y * height;
+        const dist = Math.hypot(ax - bx, ay - by);
+        if (dist < linkDistance) {
+          const alpha = 1 - dist / linkDistance;
+          ctx.strokeStyle = `rgba(20, 184, 166, ${alpha * 0.55})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+        }
+      }
+    }
+
+    for (const p of particles) {
+      ctx.fillStyle = '#e6e9ef';
+      ctx.beginPath();
+      ctx.arc(p.x * width, p.y * height, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function loop() {
+    if (!reduceMotion) step();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function setPointerFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    pointer.x = e.clientX - rect.left;
+    pointer.y = e.clientY - rect.top;
+    pointer.active = true;
+  }
+
+  canvas.addEventListener('pointermove', setPointerFromEvent);
+  canvas.addEventListener('pointerleave', () => { pointer.active = false; });
+  linkRange.addEventListener('input', () => { linkDistance = Number(linkRange.value); });
+  window.addEventListener('resize', resize);
+
+  resize();
+  draw();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>
