@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>051 — Text Scramble Reveal</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .stage {
+    width: 520px;
+    max-width: 90vw;
+    height: 200px;
+    border-radius: 16px;
+    background: var(--card);
+    display: grid;
+    place-items: center;
+  }
+
+  #headline {
+    font-family: "Courier New", monospace;
+    font-size: clamp(1.6rem, 5vw, 3rem);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text);
+  }
+
+  #headline .dud {
+    color: var(--accent);
+    opacity: 0.85;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .controls button {
+    font: inherit;
+    font-size: 0.8rem;
+    color: var(--text);
+    background: #1d2330;
+    border: 1px solid #2a3242;
+    border-radius: 8px;
+    padding: 0.45rem 0.9rem;
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--accent); }
+  .controls button:disabled { opacity: 0.5; cursor: default; }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 440px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Text Scramble Reveal — each character resolves independently through random glyphs before landing</h1>
+  <div class="stage">
+    <div id="headline">DAILY LAB</div>
+  </div>
+  <div class="controls">
+    <button type="button" id="nextBtn">Scramble to next word</button>
+  </div>
+  <p class="hint">Every character gets its own random start/end frame within the scramble window, so letters that already match settle first while the rest keep cycling through junk glyphs — no library, just <code>requestAnimationFrame</code> tracking per-character progress.</p>
+</main>
+<script>
+  const WORDS = ['DAILY LAB', 'BUILD LOOP', 'PIXEL DRIFT', 'NIGHT SHIFT', 'SIGNAL NOISE', 'SCRATCH PAD'];
+  const GLYPHS = '!<>-_\\/[]{}=+*^?#$%&';
+  const headline = document.getElementById('headline');
+  const nextBtn = document.getElementById('nextBtn');
+
+  function randomGlyph() {
+    return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
+  }
+
+  class Scrambler {
+    constructor(el) {
+      this.el = el;
+      this.frame = 0;
+      this.frameId = null;
+      this.slots = [];
+    }
+
+    reveal(nextText) {
+      const currentText = this.el.textContent;
+      const length = Math.max(currentText.length, nextText.length);
+      this.slots = [];
+      for (let i = 0; i < length; i++) {
+        const from = currentText[i] || '';
+        const to = nextText[i] || '';
+        const settleAt = 8 + Math.floor(Math.random() * 22) + i * 2;
+        this.slots.push({ from, to, settleAt, glyph: '' });
+      }
+      this.frame = 0;
+      cancelAnimationFrame(this.frameId);
+      return new Promise((resolve) => {
+        this.onDone = resolve;
+        this.tick();
+      });
+    }
+
+    tick() {
+      let output = '';
+      let settledCount = 0;
+      for (const slot of this.slots) {
+        if (this.frame >= slot.settleAt) {
+          output += slot.to;
+          settledCount++;
+        } else {
+          if (!slot.glyph || Math.random() < 0.3) slot.glyph = randomGlyph();
+          output += `<span class="dud">${slot.glyph}</span>`;
+        }
+      }
+      this.el.innerHTML = output;
+      if (settledCount === this.slots.length) {
+        this.onDone();
+        return;
+      }
+      this.frame++;
+      this.frameId = requestAnimationFrame(() => this.tick());
+    }
+  }
+
+  const scrambler = new Scrambler(headline);
+  let wordIndex = 0;
+
+  nextBtn.addEventListener('click', async () => {
+    nextBtn.disabled = true;
+    wordIndex = (wordIndex + 1) % WORDS.length;
+    await scrambler.reveal(WORDS[wordIndex]);
+    nextBtn.disabled = false;
+  });
+</script>
+</body>
+</html>
