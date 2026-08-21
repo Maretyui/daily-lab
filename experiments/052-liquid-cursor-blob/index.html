@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>052 — Liquid Cursor Blob</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  .stage {
+    position: relative;
+    width: 520px;
+    max-width: 90vw;
+    height: 360px;
+    border-radius: 16px;
+    background: var(--card);
+    overflow: hidden;
+    touch-action: none;
+    cursor: none;
+  }
+
+  .goo-field {
+    position: absolute;
+    inset: 0;
+    filter: url(#goo);
+  }
+
+  .blob {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 26px;
+    height: 26px;
+    margin: -13px 0 0 -13px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .blob:first-child {
+    width: 34px;
+    height: 34px;
+    margin: -17px 0 0 -17px;
+  }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 440px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+
+<svg width="0" height="0" style="position: absolute;">
+  <filter id="goo">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blurred" />
+    <feColorMatrix in="blurred" mode="matrix"
+      values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="goo" />
+    <feBlend in="SourceGraphic" in2="goo" />
+  </filter>
+</svg>
+
+<main>
+  <h1>Liquid Cursor Blob — a chain of circles chases the pointer, an SVG goo filter fuses them into one droplet</h1>
+  <div class="stage" id="stage">
+    <div class="goo-field" id="field"></div>
+  </div>
+  <p class="hint">No canvas and no library: each of the six dots eases toward the one in front of it every frame (the first eases toward the real pointer), and an <code>feGaussianBlur</code> + high-contrast <code>feColorMatrix</code> merges any overlapping dots into a single soft-edged blob instead of visible separate circles.</p>
+</main>
+<script>
+  const stage = document.getElementById('stage');
+  const field = document.getElementById('field');
+  const DOT_COUNT = 6;
+  const EASE = 0.32;
+
+  const dots = Array.from({ length: DOT_COUNT }, () => {
+    const el = document.createElement('div');
+    el.className = 'blob';
+    field.appendChild(el);
+    return { el, x: 0, y: 0 };
+  });
+
+  let pointer = { x: null, y: null };
+  let rect = stage.getBoundingClientRect();
+
+  window.addEventListener('resize', () => {
+    rect = stage.getBoundingClientRect();
+  });
+
+  function setPointerFromEvent(clientX, clientY) {
+    pointer.x = clientX - rect.left;
+    pointer.y = clientY - rect.top;
+  }
+
+  stage.addEventListener('pointermove', (e) => {
+    rect = stage.getBoundingClientRect();
+    setPointerFromEvent(e.clientX, e.clientY);
+  });
+
+  stage.addEventListener('pointerleave', () => {
+    pointer.x = null;
+    pointer.y = null;
+  });
+
+  // seed the chain in the center so it doesn't fly in from (0,0) on first move
+  const startX = rect.width / 2;
+  const startY = rect.height / 2;
+  for (const dot of dots) {
+    dot.x = startX;
+    dot.y = startY;
+  }
+
+  function animate() {
+    let targetX = pointer.x;
+    let targetY = pointer.y;
+
+    for (const dot of dots) {
+      if (targetX !== null) {
+        dot.x += (targetX - dot.x) * EASE;
+        dot.y += (targetY - dot.y) * EASE;
+      }
+      dot.el.style.transform = `translate(${dot.x}px, ${dot.y}px)`;
+      targetX = dot.x;
+      targetY = dot.y;
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+</script>
+</body>
+</html>
