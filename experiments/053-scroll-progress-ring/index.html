@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>053 — Scroll Progress Ring</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+    --track: #232a38;
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    /* Names the whole document's scroll progress so any element,
+       anywhere, can drive an animation off it via animation-timeline. */
+    timeline-scope: --page-scroll;
+  }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    left: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  .ring-wrap {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    z-index: 2;
+  }
+
+  .ring {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) var(--pct, 0%), var(--track) 0);
+    display: grid;
+    place-items: center;
+    /* No JS loop: the browser itself re-evaluates this animation's
+       progress against document scroll every frame, driven purely by
+       CSS's view-progress timeline. */
+    animation: fill-ring auto linear;
+    animation-timeline: scroll(root);
+  }
+
+  .ring::after {
+    content: "";
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--bg);
+  }
+
+  @keyframes fill-ring {
+    from { --pct: 0%; }
+    to   { --pct: 100%; }
+  }
+
+  @property --pct {
+    syntax: "<percentage>";
+    inherits: true;
+    initial-value: 0%;
+  }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 2rem 8rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    margin: 0 0 0.5rem;
+  }
+
+  p.hint {
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  section {
+    margin-top: 4rem;
+    padding: 2rem;
+    border-radius: 16px;
+    background: var(--card);
+  }
+
+  section h2 {
+    margin-top: 0;
+    color: var(--accent);
+    font-size: 1.1rem;
+  }
+
+  section p {
+    color: var(--muted);
+    line-height: 1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ring { animation: none; background: var(--track); }
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+
+<div class="ring-wrap">
+  <div class="ring" aria-hidden="true"></div>
+</div>
+
+<main>
+  <h1>Scroll Progress Ring</h1>
+  <p class="hint">
+    A conic-gradient ring that fills as you scroll the page — zero JavaScript,
+    zero scroll event listeners. It's a single CSS animation whose
+    <code>animation-timeline</code> is set to <code>scroll(root)</code>
+    instead of the usual wall-clock time, so the browser itself drives
+    <code>--pct</code> from 0% to 100% in lockstep with document scroll
+    progress. Keep scrolling to watch it complete.
+  </p>
+
+  <section>
+    <h2>Section one</h2>
+    <p>The ring updates continuously as the compositor scrolls this page — no <code>scroll</code> event, no <code>requestAnimationFrame</code>, no re-render.</p>
+  </section>
+  <section>
+    <h2>Section two</h2>
+    <p>Because the timeline is driven by the scroll container itself, this stays perfectly smooth even under heavy main-thread work that would normally cause a JS-based scroll progress bar to lag or jank.</p>
+  </section>
+  <section>
+    <h2>Section three</h2>
+    <p><code>@property --pct</code> registers the custom property as an animatable <code>&lt;percentage&gt;</code>, which is what lets the browser interpolate it smoothly inside the <code>conic-gradient()</code> instead of snapping between keyframe values.</p>
+  </section>
+  <section>
+    <h2>Section four</h2>
+    <p>Support: Chrome/Edge 115+ and Firefox 129+ implement scroll-driven animations natively. Safari doesn't yet — the ring simply stays static there, which is an acceptable fallback for a decorative progress indicator.</p>
+  </section>
+  <section>
+    <h2>The end</h2>
+    <p>The ring should now read as fully filled. Scroll back up to watch it drain in reverse — the timeline works both ways for free.</p>
+  </section>
+</main>
+</body>
+</html>
