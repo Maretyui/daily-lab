@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>054 — FLIP Reorder List</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  ul.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 320px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  ul.list li {
+    background: var(--card);
+    border: 1px solid #232a38;
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    cursor: grab;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    touch-action: none;
+  }
+
+  ul.list li:active { cursor: grabbing; }
+
+  ul.list li.dragging {
+    opacity: 0.4;
+    border-color: var(--accent);
+  }
+
+  ul.list li .handle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 440px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+
+<main>
+  <h1>FLIP Reorder List — drag any row, the rest glide out of the way</h1>
+  <ul class="list" id="list">
+    <li draggable="true"><span class="handle">⠿</span>Druckausgleich</li>
+    <li draggable="true"><span class="handle">⠿</span>Abtauchen</li>
+    <li draggable="true"><span class="handle">⠿</span>CO2-Toleranz</li>
+    <li draggable="true"><span class="handle">⠿</span>Ringe-Parcours</li>
+    <li draggable="true"><span class="handle">⠿</span>Notaufstieg</li>
+  </ul>
+  <p class="hint">
+    Plain HTML5 drag-and-drop for the actual reordering, plus the FLIP
+    technique (First, Last, Invert, Play) for the animation: before the DOM
+    reorders, every item's current position is recorded; right after it
+    reorders, each item is snapped back to its old spot with a negative
+    transform, then eased to zero — so it visually glides to its new slot
+    instead of teleporting.
+  </p>
+</main>
+<script>
+  const list = document.getElementById('list');
+  let draggingEl = null;
+
+  function measurePositions() {
+    const map = new Map();
+    for (const li of list.children) {
+      map.set(li, li.getBoundingClientRect().top);
+    }
+    return map;
+  }
+
+  function playFlip(before) {
+    for (const li of list.children) {
+      const after = li.getBoundingClientRect().top;
+      const beforeTop = before.get(li);
+      if (beforeTop === undefined) continue;
+      const delta = beforeTop - after;
+      if (delta === 0) continue;
+      li.style.transition = 'none';
+      li.style.transform = `translateY(${delta}px)`;
+      requestAnimationFrame(() => {
+        li.style.transition = 'transform 0.25s ease';
+        li.style.transform = '';
+      });
+    }
+  }
+
+  list.addEventListener('dragstart', (e) => {
+    draggingEl = e.target.closest('li');
+    draggingEl.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  list.addEventListener('dragend', () => {
+    draggingEl?.classList.remove('dragging');
+    draggingEl = null;
+  });
+
+  list.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const target = e.target.closest('li');
+    if (!target || target === draggingEl) return;
+
+    const before = measurePositions();
+
+    const rect = target.getBoundingClientRect();
+    const after = (e.clientY - rect.top) / rect.height > 0.5;
+    target.parentNode.insertBefore(
+      draggingEl,
+      after ? target.nextSibling : target
+    );
+
+    playFlip(before);
+  });
+</script>
+</body>
+</html>
