@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>057 — Spring Physics Toast Queue</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+  }
+
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  p.hint { color: var(--muted); font-size: 0.85rem; margin: 0; text-align: center; max-width: 26rem; }
+
+  button {
+    font: inherit;
+    font-size: 0.9rem;
+    color: var(--text);
+    background: var(--card);
+    border: 1px solid #232a38;
+    border-radius: 0.6rem;
+    padding: 0.6rem 1.1rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+
+  .toast-layer {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    pointer-events: none;
+  }
+
+  .toast {
+    position: relative;
+    min-width: 15rem;
+    max-width: 20rem;
+    background: var(--card);
+    border: 1px solid #232a38;
+    border-left: 3px solid var(--accent);
+    border-radius: 0.6rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+    will-change: transform, opacity;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>057 — Spring Physics Toast Queue</h1>
+  <p class="hint">Every click spawns a toast. Position and opacity aren't CSS-eased — each toast is a tiny mass-spring-damper simulation stepped on requestAnimationFrame, so newer toasts shove older ones into their stacked slot with real overshoot instead of a canned transition curve.</p>
+  <button id="spawn">Spawn toast</button>
+</main>
+<div class="toast-layer" id="layer"></div>
+<script>
+  const layer = document.getElementById("layer");
+  const spawnBtn = document.getElementById("spawn");
+
+  const messages = [
+    "Deploy finished",
+    "3 new comments",
+    "Build passed",
+    "File saved",
+    "Sync complete",
+    "Backup created",
+    "Task assigned to you",
+    "Connection restored",
+  ];
+
+  // Each toast tracks a target Y offset (its slot in the stack) and simulates
+  // its way there with a critically-underdamped spring instead of a CSS transition,
+  // so inserting/removing toasts produces real physical overshoot on the neighbors.
+  const STIFFNESS = 210;
+  const DAMPING = 18;
+  const GAP = 10;
+
+  const toasts = [];
+  let running = false;
+
+  function spawn() {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = messages[Math.floor(Math.random() * messages.length)];
+    layer.appendChild(el);
+
+    const toast = {
+      el,
+      height: 0,
+      y: 40,      // start below its resting spot
+      vy: 0,
+      target: 0,
+      opacity: 0,
+      dying: false,
+      dyingTimer: 0,
+    };
+    toasts.push(toast);
+    requestAnimationFrame(() => {
+      toast.height = el.offsetHeight;
+      layoutTargets();
+    });
+
+    startLoop();
+    setTimeout(() => dismiss(toast), 4000);
+  }
+
+  function dismiss(toast) {
+    if (toast.dying) return;
+    toast.dying = true;
+    layoutTargets();
+  }
+
+  // Only non-dying toasts occupy a slot in the stack - a dismissed toast keeps
+  // simulating (fading/drifting) but no longer pushes the others around.
+  function layoutTargets() {
+    let offset = 0;
+    for (let i = toasts.length - 1; i >= 0; i--) {
+      const t = toasts[i];
+      if (t.dying) continue;
+      t.target = offset;
+      offset += t.height + GAP;
+    }
+  }
+
+  function startLoop() {
+    if (running) return;
+    running = true;
+    lastTime = 0;
+    requestAnimationFrame(tick);
+  }
+
+  let lastTime = 0;
+  function tick(time) {
+    const dt = Math.min((time - (lastTime || time)) / 1000, 0.05);
+    lastTime = time;
+
+    let anyAlive = false;
+    for (let i = toasts.length - 1; i >= 0; i--) {
+      const t = toasts[i];
+      const targetOpacity = t.dying ? 0 : 1;
+      t.opacity += (targetOpacity - t.opacity) * (1 - Math.exp(-dt * 10));
+
+      const springForce = (t.target - t.y) * STIFFNESS;
+      const dampingForce = -t.vy * DAMPING;
+      t.vy += (springForce + dampingForce) * dt;
+      t.y += t.vy * dt;
+
+      t.el.style.transform = `translateY(${t.y}px)`;
+      t.el.style.opacity = t.opacity.toFixed(3);
+
+      if (t.dying) {
+        t.dyingTimer += dt;
+        if (t.opacity < 0.02 || t.dyingTimer > 1) {
+          t.el.remove();
+          toasts.splice(i, 1);
+          continue;
+        }
+      }
+
+      const settled = Math.abs(t.target - t.y) < 0.3 && Math.abs(t.vy) < 0.3;
+      if (!settled || t.dying) anyAlive = true;
+    }
+
+    if (anyAlive) {
+      requestAnimationFrame(tick);
+    } else {
+      running = false;
+    }
+  }
+
+  spawnBtn.addEventListener("click", spawn);
+  spawn();
+</script>
+</body>
+</html>
