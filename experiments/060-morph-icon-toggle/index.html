@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>060 — Morph Icon Toggle</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+  }
+
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  p.hint { color: var(--muted); font-size: 0.85rem; margin: 0; text-align: center; max-width: 24rem; }
+
+  .buttons {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  button.icon-toggle {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.9rem;
+    background: var(--card);
+    border: 1px solid #232a38;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: var(--accent);
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  button.icon-toggle:hover { border-color: var(--accent); }
+  button.icon-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  svg { width: 1.6rem; height: 1.6rem; overflow: visible; }
+  path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: d 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  .state {
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>060 — Morph Icon Toggle</h1>
+  <p class="hint">Each icon is one SVG path — clicking swaps its "d" attribute to an alternate shape built from the exact same command sequence, so the CSS transition on "d" interpolates the coordinates directly, no icon library or keyframe animation involved.</p>
+  <div class="buttons">
+    <button class="icon-toggle" id="menuToggle" aria-label="Toggle menu" aria-pressed="false" type="button">
+      <svg viewBox="0 0 24 24">
+        <path id="menuPath" d="M4 6 L20 6 M4 12 L20 12 M4 18 L20 18" />
+      </svg>
+    </button>
+    <button class="icon-toggle" id="chevronToggle" aria-label="Expand" aria-pressed="false" type="button">
+      <svg viewBox="0 0 24 24">
+        <path id="chevronPath" d="M6 9 L12 15 L18 9" />
+      </svg>
+    </button>
+  </div>
+  <p class="state" id="stateText">menu closed · collapsed</p>
+</main>
+<script>
+  const menuBtn = document.getElementById("menuToggle");
+  const menuPath = document.getElementById("menuPath");
+  const chevronBtn = document.getElementById("chevronToggle");
+  const chevronPath = document.getElementById("chevronPath");
+  const stateText = document.getElementById("stateText");
+
+  // Both shapes in each pair share the same command sequence (M,L,M,L,M,L
+  // for the menu icon; M,L,L for the chevron) so the browser interpolates
+  // the "d" string's coordinates directly instead of just snapping between
+  // two unrelated shapes — mismatched command counts/types fall back to a
+  // hard cut with no animation at all.
+  const MENU_SHAPE = "M4 6 L20 6 M4 12 L20 12 M4 18 L20 18";
+  const CLOSE_SHAPE = "M5 5 L19 19 M12 12 L12 12 M19 5 L5 19";
+
+  const CHEVRON_DOWN = "M6 9 L12 15 L18 9";
+  const CHEVRON_UP = "M6 15 L12 9 L18 15";
+
+  let menuOpen = false;
+  let expanded = false;
+
+  function updateState() {
+    stateText.textContent = `menu ${menuOpen ? "open" : "closed"} · ${expanded ? "expanded" : "collapsed"}`;
+  }
+
+  menuBtn.addEventListener("click", () => {
+    menuOpen = !menuOpen;
+    menuPath.setAttribute("d", menuOpen ? CLOSE_SHAPE : MENU_SHAPE);
+    menuBtn.setAttribute("aria-pressed", String(menuOpen));
+    menuBtn.setAttribute("aria-label", menuOpen ? "Close menu" : "Open menu");
+    updateState();
+  });
+
+  chevronBtn.addEventListener("click", () => {
+    expanded = !expanded;
+    chevronPath.setAttribute("d", expanded ? CHEVRON_UP : CHEVRON_DOWN);
+    chevronBtn.setAttribute("aria-pressed", String(expanded));
+    chevronBtn.setAttribute("aria-label", expanded ? "Collapse" : "Expand");
+    updateState();
+  });
+</script>
+</body>
+</html>
