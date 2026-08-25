@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>059 — Rotary Knob Control</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem;
+  }
+
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  p.hint { color: var(--muted); font-size: 0.85rem; margin: 0; text-align: center; max-width: 24rem; }
+
+  .knobs {
+    display: flex;
+    gap: 2.5rem;
+  }
+
+  .knob-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .knob {
+    width: 6rem;
+    height: 6rem;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #1e2534, var(--card) 70%);
+    border: 1px solid #232a38;
+    position: relative;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .knob:active { cursor: grabbing; }
+
+  .knob::before {
+    content: "";
+    position: absolute;
+    inset: 0.6rem;
+    border-radius: 50%;
+    border: 1px solid #1e2430;
+  }
+
+  .indicator {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0.25rem;
+    height: 2rem;
+    background: var(--accent);
+    border-radius: 0.2rem;
+    transform-origin: 50% 0%;
+    transform: translate(-50%, 0.6rem) rotate(0deg);
+  }
+
+  .value {
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .label {
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>059 — Rotary Knob Control</h1>
+  <p class="hint">Drag vertically (or touch-drag) on a knob to turn it — angle maps to a 0–100 value, clamped at both ends like a real potentiometer, not a full 360° dial.</p>
+  <div class="knobs" id="knobs">
+    <div class="knob-wrap">
+      <div class="knob" data-value="35" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-label="Gain">
+        <div class="indicator"></div>
+      </div>
+      <div class="value">35</div>
+      <div class="label">Gain</div>
+    </div>
+    <div class="knob-wrap">
+      <div class="knob" data-value="70" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100" aria-label="Tone">
+        <div class="indicator"></div>
+      </div>
+      <div class="value">70</div>
+      <div class="label">Tone</div>
+    </div>
+  </div>
+</main>
+<script>
+  const MIN_ANGLE = -135;
+  const MAX_ANGLE = 135;
+
+  function valueToAngle(v) {
+    return MIN_ANGLE + (v / 100) * (MAX_ANGLE - MIN_ANGLE);
+  }
+
+  function applyValue(wrap, value) {
+    value = Math.max(0, Math.min(100, value));
+    const knob = wrap.querySelector(".knob");
+    const indicator = wrap.querySelector(".indicator");
+    const valueEl = wrap.querySelector(".value");
+    knob.dataset.value = value;
+    knob.setAttribute("aria-valuenow", Math.round(value));
+    indicator.style.transform = `translate(-50%, 0.6rem) rotate(${valueToAngle(value)}deg)`;
+    valueEl.textContent = Math.round(value);
+  }
+
+  document.querySelectorAll(".knob-wrap").forEach((wrap) => {
+    const knob = wrap.querySelector(".knob");
+    applyValue(wrap, parseFloat(knob.dataset.value));
+
+    let dragging = false;
+    let startY = 0;
+    let startValue = 0;
+
+    function down(y) {
+      dragging = true;
+      startY = y;
+      startValue = parseFloat(knob.dataset.value);
+    }
+    function move(y) {
+      if (!dragging) return;
+      // Vertical drag distance to value delta — dragging up increases,
+      // dragging down decreases, same convention as a DAW plugin knob.
+      const delta = (startY - y) * 0.6;
+      applyValue(wrap, startValue + delta);
+    }
+    function up() {
+      dragging = false;
+    }
+
+    knob.addEventListener("mousedown", (e) => down(e.clientY));
+    window.addEventListener("mousemove", (e) => move(e.clientY));
+    window.addEventListener("mouseup", up);
+
+    knob.addEventListener("touchstart", (e) => down(e.touches[0].clientY), { passive: true });
+    knob.addEventListener("touchmove", (e) => move(e.touches[0].clientY), { passive: true });
+    knob.addEventListener("touchend", up);
+
+    knob.addEventListener("keydown", (e) => {
+      const current = parseFloat(knob.dataset.value);
+      if (e.key === "ArrowUp" || e.key === "ArrowRight") {
+        applyValue(wrap, current + 5);
+        e.preventDefault();
+      } else if (e.key === "ArrowDown" || e.key === "ArrowLeft") {
+        applyValue(wrap, current - 5);
+        e.preventDefault();
+      }
+    });
+  });
+</script>
+</body>
+</html>
