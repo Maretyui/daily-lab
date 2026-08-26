@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>061 — Scroll-Snap Carousel with Dot Indicators</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    width: 100%;
+    max-width: 28rem;
+  }
+
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  p.hint { color: var(--muted); font-size: 0.85rem; margin: 0; text-align: center; max-width: 24rem; }
+
+  .carousel {
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    border-radius: 0.9rem;
+    scrollbar-width: none;
+  }
+  .carousel::-webkit-scrollbar { display: none; }
+
+  .slide {
+    flex: 0 0 100%;
+    scroll-snap-align: center;
+    height: 12rem;
+    display: grid;
+    place-items: center;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--bg);
+  }
+  .slide:nth-child(1) { background: #14b8a6; }
+  .slide:nth-child(2) { background: #f59e0b; }
+  .slide:nth-child(3) { background: #ec4899; }
+  .slide:nth-child(4) { background: #6366f1; }
+
+  .dots {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  .dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    border: none;
+    padding: 0;
+    background: #232a38;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  .dot:hover { background: var(--muted); }
+  .dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dot.active { background: var(--accent); transform: scale(1.2); }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>061 — Scroll-Snap Carousel with Dot Indicators</h1>
+  <p class="hint">Slides scroll and snap natively (no drag JS at all) — an IntersectionObserver watches which slide is most visible and syncs the active dot to it, and clicking a dot scrolls the carousel back, both directions wired through the same source of truth.</p>
+  <div class="carousel" id="carousel">
+    <div class="slide">1</div>
+    <div class="slide">2</div>
+    <div class="slide">3</div>
+    <div class="slide">4</div>
+  </div>
+  <div class="dots" id="dots" role="tablist" aria-label="Carousel slides"></div>
+</main>
+<script>
+  const carousel = document.getElementById("carousel");
+  const slides = Array.from(carousel.children);
+  const dotsWrap = document.getElementById("dots");
+
+  const dots = slides.map((slide, i) => {
+    const dot = document.createElement("button");
+    dot.className = "dot";
+    dot.type = "button";
+    dot.setAttribute("role", "tab");
+    dot.setAttribute("aria-label", `Go to slide ${i + 1}`);
+    dot.addEventListener("click", () => {
+      slide.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    });
+    dotsWrap.appendChild(dot);
+    return dot;
+  });
+
+  function setActive(index) {
+    dots.forEach((dot, i) => {
+      const active = i === index;
+      dot.classList.toggle("active", active);
+      dot.setAttribute("aria-selected", String(active));
+    });
+  }
+  setActive(0);
+
+  // Each slide reports its own intersection ratio; the one most centered in
+  // the viewport (highest ratio) wins, so fast/manual scrolling never leaves
+  // two dots active or none at all mid-transition.
+  const observer = new IntersectionObserver(
+    (entries) => {
+      let best = null;
+      for (const entry of entries) {
+        if (entry.isIntersecting && (!best || entry.intersectionRatio > best.intersectionRatio)) {
+          best = entry;
+        }
+      }
+      if (best) setActive(slides.indexOf(best.target));
+    },
+    { root: carousel, threshold: [0.6, 0.75, 0.9] }
+  );
+  slides.forEach((slide) => observer.observe(slide));
+</script>
+</body>
+</html>
