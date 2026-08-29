@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>063 — Resizable Split Pane</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem 1.5rem;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p.hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+    text-align: center;
+    max-width: 32rem;
+  }
+
+  .split {
+    --left: 40%;
+    display: grid;
+    grid-template-columns: var(--left) 6px 1fr;
+    width: min(90vw, 46rem);
+    height: min(60vh, 22rem);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid #232a38;
+  }
+
+  .pane {
+    background: var(--card);
+    padding: 1.25rem;
+    overflow: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .pane strong {
+    display: block;
+    color: var(--text);
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .divider {
+    background: #1c2230;
+    cursor: col-resize;
+    position: relative;
+    touch-action: none;
+  }
+
+  .divider::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 2px;
+    height: 2rem;
+    top: 0;
+    bottom: 0;
+    background: var(--muted);
+    border-radius: 999px;
+  }
+
+  .divider:hover::after,
+  .divider.active::after {
+    background: var(--accent);
+  }
+
+  .split.resizing {
+    user-select: none;
+    cursor: col-resize;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>063 — Resizable Split Pane</h1>
+  <p class="hint">Drag the divider to resize. Pointer events capture the drag so the cursor can leave the divider without breaking the resize, and the column width is clamped so neither pane can be dragged to zero.</p>
+  <div class="split" id="split">
+    <div class="pane left">
+      <strong>Left pane</strong>
+      Width is driven by a single CSS custom property (<code>--left</code>) on the grid container, updated on <code>pointermove</code>. No layout library, just <code>grid-template-columns</code>.
+    </div>
+    <div class="divider" id="divider" role="separator" aria-orientation="vertical" aria-label="Resize panes" tabindex="0"></div>
+    <div class="pane right">
+      <strong>Right pane</strong>
+      Try dragging past either edge — the width is clamped between 15% and 85% so both panes stay usable. Arrow keys also work while the divider has focus.
+    </div>
+  </div>
+</main>
+<script>
+  const split = document.getElementById('split');
+  const divider = document.getElementById('divider');
+  const MIN = 15, MAX = 85;
+  let dragging = false;
+
+  function setLeft(pct) {
+    const clamped = Math.min(MAX, Math.max(MIN, pct));
+    split.style.setProperty('--left', clamped + '%');
+    divider.setAttribute('aria-valuenow', Math.round(clamped));
+  }
+
+  divider.addEventListener('pointerdown', (e) => {
+    dragging = true;
+    divider.classList.add('active');
+    split.classList.add('resizing');
+    divider.setPointerCapture(e.pointerId);
+  });
+
+  divider.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const rect = split.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    setLeft(pct);
+  });
+
+  function stop() {
+    dragging = false;
+    divider.classList.remove('active');
+    split.classList.remove('resizing');
+  }
+  divider.addEventListener('pointerup', stop);
+  divider.addEventListener('pointercancel', stop);
+
+  divider.addEventListener('keydown', (e) => {
+    const current = parseFloat(getComputedStyle(split).getPropertyValue('--left')) ||
+      parseFloat(split.style.getPropertyValue('--left'));
+    const rect = split.getBoundingClientRect();
+    const currentPct = ((rect.width * 0.4) / rect.width) * 100;
+    let val = split.style.getPropertyValue('--left');
+    val = val ? parseFloat(val) : 40;
+    if (e.key === 'ArrowLeft') { setLeft(val - 2); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { setLeft(val + 2); e.preventDefault(); }
+  });
+
+  setLeft(40);
+</script>
+</body>
+</html>
