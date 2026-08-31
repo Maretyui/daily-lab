@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>065 — Oscillator Frequency Visualizer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem 1.5rem;
+    width: min(90vw, 34rem);
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p.hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+    text-align: center;
+    max-width: 32rem;
+  }
+
+  .panel {
+    width: 100%;
+    padding: 1.25rem;
+    border-radius: 0.75rem;
+    background: var(--card);
+    border: 1px solid #232a38;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  canvas {
+    width: 100%;
+    height: 10rem;
+    border-radius: 0.5rem;
+    background: #0d1119;
+    display: block;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  button {
+    all: unset;
+    padding: 0.5rem 1rem;
+    border-radius: 0.4rem;
+    background: var(--accent);
+    color: #06110f;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  select {
+    background: #0d1119;
+    color: var(--text);
+    border: 1px solid #232a38;
+    border-radius: 0.35rem;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  input[type="range"] {
+    accent-color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>065 — Oscillator Frequency Visualizer</h1>
+  <p class="hint">Plays a synthesized tone through a Web Audio <code>AnalyserNode</code> and draws its live frequency spectrum on canvas — no microphone permission needed since the source is a generated oscillator, not room audio.</p>
+  <div class="panel">
+    <canvas id="viz" width="640" height="160"></canvas>
+    <div class="controls">
+      <button id="toggle">Play</button>
+      <div class="field">
+        <label for="wave">Wave</label>
+        <select id="wave">
+          <option value="sine">sine</option>
+          <option value="sawtooth">sawtooth</option>
+          <option value="square">square</option>
+          <option value="triangle">triangle</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="freq">Pitch</label>
+        <input type="range" id="freq" min="80" max="880" value="220" step="1">
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+  const canvas = document.getElementById('viz');
+  const ctx = canvas.getContext('2d');
+  const toggleBtn = document.getElementById('toggle');
+  const waveSelect = document.getElementById('wave');
+  const freqSlider = document.getElementById('freq');
+
+  let audioCtx = null;
+  let oscillator = null;
+  let gainNode = null;
+  let analyser = null;
+  let dataArray = null;
+  let rafId = null;
+  let playing = false;
+
+  function setup() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0.15;
+
+    oscillator = audioCtx.createOscillator();
+    oscillator.type = waveSelect.value;
+    oscillator.frequency.value = Number(freqSlider.value);
+    oscillator.connect(gainNode);
+    gainNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    oscillator.start();
+  }
+
+  function draw() {
+    rafId = requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(dataArray);
+
+    ctx.fillStyle = '#0d1119';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const barWidth = (canvas.width / dataArray.length) * 1.6;
+    let x = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const barHeight = (dataArray[i] / 255) * canvas.height;
+      ctx.fillStyle = i % 2 === 0 ? '#14b8a6' : '#0f8f82';
+      ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+      x += barWidth + 1;
+    }
+  }
+
+  function stop() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    if (oscillator) {
+      oscillator.stop();
+      oscillator.disconnect();
+      oscillator = null;
+    }
+    if (audioCtx) {
+      audioCtx.close();
+      audioCtx = null;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    playing = false;
+    toggleBtn.textContent = 'Play';
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    if (playing) {
+      stop();
+      return;
+    }
+    setup();
+    draw();
+    playing = true;
+    toggleBtn.textContent = 'Stop';
+  });
+
+  waveSelect.addEventListener('change', () => {
+    if (oscillator) oscillator.type = waveSelect.value;
+  });
+
+  freqSlider.addEventListener('input', () => {
+    if (oscillator) oscillator.frequency.value = Number(freqSlider.value);
+  });
+
+  window.addEventListener('pagehide', stop);
+</script>
+</body>
+</html>
