@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>066 — Accessible Searchable Combobox</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem 1.5rem;
+    width: min(90vw, 26rem);
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p.hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+    text-align: center;
+    max-width: 32rem;
+  }
+
+  .combo {
+    position: relative;
+    width: 100%;
+  }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid #232a38;
+    background: var(--card);
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+
+  input[type="text"]:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  ul.listbox {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    right: 0;
+    max-height: 14rem;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0.35rem;
+    list-style: none;
+    background: var(--card);
+    border: 1px solid #232a38;
+    border-radius: 0.5rem;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    display: none;
+    z-index: 10;
+  }
+
+  ul.listbox.open { display: block; }
+
+  ul.listbox li {
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.35rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  ul.listbox li mark {
+    background: none;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  ul.listbox li[aria-selected="true"] {
+    background: #1e2534;
+  }
+
+  ul.listbox li.empty {
+    color: var(--muted);
+    cursor: default;
+  }
+
+  p.status {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>066 — Accessible Searchable Combobox</h1>
+  <p class="hint">A from-scratch implementation of the ARIA 1.2 combobox pattern: filters as you type, Up/Down moves the active option, Enter selects it, Escape closes the list, and the active option is announced via <code>aria-activedescendant</code> rather than moving real focus off the input.</p>
+  <div class="combo">
+    <label for="input">Search Minecraft plugins</label>
+    <input
+      type="text"
+      id="input"
+      role="combobox"
+      aria-expanded="false"
+      aria-controls="listbox"
+      aria-autocomplete="list"
+      autocomplete="off"
+      placeholder="Start typing…"
+    >
+    <ul class="listbox" id="listbox" role="listbox"></ul>
+  </div>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+  const ITEMS = [
+    'WorldEdit', 'WorldGuard', 'LuckPerms', 'Vault', 'EssentialsX',
+    'ProtocolLib', 'PlaceholderAPI', 'Multiverse-Core', 'CoreProtect',
+    'ViaVersion', 'Citizens', 'mcMMO', 'Dynmap', 'GriefPrevention',
+    'ChestShop', 'DiscordSRV', 'Skript', 'HolographicDisplays',
+  ];
+
+  const input = document.getElementById('input');
+  const listbox = document.getElementById('listbox');
+  const status = document.getElementById('status');
+
+  let filtered = [];
+  let activeIndex = -1;
+
+  function optionId(i) {
+    return 'opt-' + i;
+  }
+
+  function render(query) {
+    filtered = ITEMS.filter((item) =>
+      item.toLowerCase().includes(query.toLowerCase())
+    );
+    listbox.innerHTML = '';
+
+    if (!query) {
+      close();
+      return;
+    }
+
+    if (filtered.length === 0) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'No matches';
+      listbox.appendChild(li);
+      status.textContent = 'No matches';
+      open();
+      return;
+    }
+
+    filtered.forEach((item, i) => {
+      const li = document.createElement('li');
+      li.id = optionId(i);
+      li.setAttribute('role', 'option');
+      const idx = item.toLowerCase().indexOf(query.toLowerCase());
+      if (idx === -1) {
+        li.textContent = item;
+      } else {
+        li.innerHTML =
+          item.slice(0, idx) +
+          '<mark>' + item.slice(idx, idx + query.length) + '</mark>' +
+          item.slice(idx + query.length);
+      }
+      li.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        select(i);
+      });
+      listbox.appendChild(li);
+    });
+
+    activeIndex = 0;
+    updateActive();
+    status.textContent = filtered.length + ' result' + (filtered.length === 1 ? '' : 's') + ' available';
+    open();
+  }
+
+  function updateActive() {
+    [...listbox.children].forEach((li, i) => {
+      li.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
+    });
+    const activeEl = listbox.children[activeIndex];
+    input.setAttribute('aria-activedescendant', activeEl ? activeEl.id : '');
+    if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+  }
+
+  function open() {
+    listbox.classList.add('open');
+    input.setAttribute('aria-expanded', 'true');
+  }
+
+  function close() {
+    listbox.classList.remove('open');
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    activeIndex = -1;
+  }
+
+  function select(i) {
+    if (!filtered[i]) return;
+    input.value = filtered[i];
+    close();
+    status.textContent = 'Selected ' + filtered[i];
+  }
+
+  input.addEventListener('input', () => render(input.value));
+
+  input.addEventListener('keydown', (e) => {
+    const isOpen = listbox.classList.contains('open');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!isOpen) return render(input.value);
+      if (filtered.length === 0) return;
+      activeIndex = (activeIndex + 1) % filtered.length;
+      updateActive();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!isOpen || filtered.length === 0) return;
+      activeIndex = (activeIndex - 1 + filtered.length) % filtered.length;
+      updateActive();
+    } else if (e.key === 'Enter') {
+      if (isOpen && activeIndex >= 0) {
+        e.preventDefault();
+        select(activeIndex);
+      }
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(close, 100);
+  });
+</script>
+</body>
+</html>
