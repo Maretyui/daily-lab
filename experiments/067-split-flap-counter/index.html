@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>067 — Split-Flap Counter</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 2rem 1.5rem;
+    width: min(90vw, 30rem);
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p.hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+    text-align: center;
+    max-width: 32rem;
+  }
+
+  .board {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .digit {
+    position: relative;
+    width: 2.6rem;
+    height: 3.6rem;
+    perspective: 300px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .digit .face {
+    position: absolute;
+    inset: 0;
+    background: var(--card);
+    border-radius: 0.35rem;
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+  }
+
+  .digit .face::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: rgba(0,0,0,0.5);
+  }
+
+  .digit .top,
+  .digit .bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 50%;
+    overflow: hidden;
+    background: var(--card);
+    border-radius: 0.35rem;
+  }
+
+  .digit .top { top: 0; }
+  .digit .bottom { bottom: 0; }
+
+  .digit .top span,
+  .digit .bottom span {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: grid;
+    place-items: center;
+    font-size: 2rem;
+    font-weight: 700;
+    height: 3.6rem;
+  }
+
+  .digit .top span { top: 0; }
+  .digit .bottom span { bottom: 0; }
+
+  .digit .flip {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 50%;
+    background: var(--card);
+    border-radius: 0.35rem 0.35rem 0 0;
+    transform-origin: bottom;
+    transform: rotateX(0deg);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .digit .flip span {
+    font-size: 2rem;
+    font-weight: 700;
+    transform: translateY(50%);
+  }
+
+  .digit.flipping .flip {
+    animation: flipDown 0.35s ease-in forwards;
+  }
+
+  @keyframes flipDown {
+    to { transform: rotateX(-90deg); }
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  button {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid #262c3a;
+    border-radius: 0.4rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  button:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>067 — Split-Flap Counter</h1>
+  <p class="hint">Airport-board style digit cascade. Each digit change plays a short flap animation via a cloned top-half tile rotated on its bottom edge, layered over the static split face underneath — no image assets, no library.</p>
+  <div class="board" id="board" aria-live="polite" aria-label="counter value"></div>
+  <div class="controls">
+    <button id="decBtn" type="button">−1</button>
+    <button id="incBtn" type="button">+1</button>
+    <button id="jumpBtn" type="button">Random</button>
+  </div>
+</main>
+<script>
+  const board = document.getElementById('board');
+  const DIGITS = 4;
+  let value = 0;
+  let cells = [];
+
+  function pad(n) {
+    return String(Math.max(0, Math.min(9999, n))).padStart(DIGITS, '0');
+  }
+
+  function buildCell() {
+    const cell = document.createElement('div');
+    cell.className = 'digit';
+    cell.innerHTML = `
+      <div class="face"></div>
+      <div class="top"><span>0</span></div>
+      <div class="bottom"><span>0</span></div>
+      <div class="flip"><span>0</span></div>
+    `;
+    return cell;
+  }
+
+  function init() {
+    board.innerHTML = '';
+    cells = [];
+    for (let i = 0; i < DIGITS; i++) {
+      const cell = buildCell();
+      board.appendChild(cell);
+      cells.push(cell);
+    }
+    render(pad(value), true);
+  }
+
+  function render(str, instant) {
+    str.split('').forEach((ch, i) => {
+      const cell = cells[i];
+      const face = cell.querySelector('.face');
+      const prev = face.textContent || '0';
+      if (prev === ch) return;
+
+      cell.querySelectorAll('.top span, .bottom span, .flip span').forEach(s => s.textContent = ch);
+      face.textContent = ch;
+
+      if (instant) return;
+
+      const flip = cell.querySelector('.flip span');
+      flip.textContent = prev;
+      cell.classList.remove('flipping');
+      void cell.offsetWidth;
+      cell.classList.add('flipping');
+      cell.querySelector('.flip').addEventListener('animationend', () => {
+        cell.classList.remove('flipping');
+        cell.querySelector('.flip span').textContent = ch;
+      }, { once: true });
+    });
+  }
+
+  function setValue(n) {
+    value = Math.max(0, Math.min(9999, n));
+    render(pad(value), false);
+  }
+
+  document.getElementById('incBtn').addEventListener('click', () => setValue(value + 1));
+  document.getElementById('decBtn').addEventListener('click', () => setValue(value - 1));
+  document.getElementById('jumpBtn').addEventListener('click', () => setValue(Math.floor(Math.random() * 10000)));
+
+  init();
+</script>
+</body>
+</html>
