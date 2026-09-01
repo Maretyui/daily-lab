@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>068 — Ripple Grid Hover</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem 1.5rem;
+    width: min(90vw, 34rem);
+  }
+
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p.hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0;
+    text-align: center;
+    max-width: 32rem;
+  }
+
+  .grid-wrap {
+    width: min(90vw, 30rem);
+    aspect-ratio: 3 / 2;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    border: 1px solid #262c3a;
+    background: var(--card);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(18, 1fr);
+    grid-template-rows: repeat(12, 1fr);
+    width: 100%;
+    height: 100%;
+  }
+
+  .cell {
+    --scale: 1;
+    --glow: 0;
+    background: color-mix(in srgb, var(--accent) calc(var(--glow) * 45%), var(--card));
+    transform: scale(var(--scale));
+    border: 1px solid rgba(255,255,255,0.03);
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>068 — Ripple Grid Hover</h1>
+  <p class="hint">A grid of divs whose scale/glow are driven purely by each cell's own distance to the pointer, recomputed on pointermove via CSS custom properties — no per-cell event listeners, one shared handler reading cached cell centers.</p>
+  <div class="grid-wrap">
+    <div class="grid" id="grid"></div>
+  </div>
+</main>
+<script>
+  const COLS = 18;
+  const ROWS = 12;
+  const grid = document.getElementById('grid');
+  const cells = [];
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      grid.appendChild(cell);
+      cells.push({ el: cell, cx: 0, cy: 0 });
+    }
+  }
+
+  function measure() {
+    const rect = grid.getBoundingClientRect();
+    const cw = rect.width / COLS;
+    const ch = rect.height / ROWS;
+    cells.forEach((cell, i) => {
+      const r = Math.floor(i / COLS);
+      const c = i % COLS;
+      cell.cx = rect.left + (c + 0.5) * cw;
+      cell.cy = rect.top + (r + 0.5) * ch;
+    });
+    return cw;
+  }
+
+  let cellSize = measure();
+  window.addEventListener('resize', () => { cellSize = measure(); });
+
+  const RADIUS = 130;
+
+  function updatePointer(x, y) {
+    cells.forEach(cell => {
+      const dx = cell.cx - x;
+      const dy = cell.cy - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const t = Math.max(0, 1 - dist / RADIUS);
+      cell.el.style.setProperty('--scale', (0.55 + t * 0.55).toFixed(3));
+      cell.el.style.setProperty('--glow', t.toFixed(3));
+    });
+  }
+
+  function reset() {
+    cells.forEach(cell => {
+      cell.el.style.setProperty('--scale', 0.85);
+      cell.el.style.setProperty('--glow', 0);
+    });
+  }
+
+  grid.addEventListener('pointermove', e => updatePointer(e.clientX, e.clientY));
+  grid.addEventListener('pointerleave', reset);
+  reset();
+</script>
+</body>
+</html>
