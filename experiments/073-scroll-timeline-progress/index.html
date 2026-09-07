@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>073 — Scroll-Timeline Progress</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0b0e14;
+    color: #e6e9ef;
+  }
+
+  .progress-track {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    background: #151a24;
+    z-index: 10;
+  }
+
+  .progress-bar {
+    height: 100%;
+    transform-origin: left;
+    background: linear-gradient(90deg, #14b8a6, #6366f1);
+    animation: grow linear;
+    animation-timeline: scroll(root block);
+  }
+
+  @keyframes grow {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+  }
+
+  main {
+    max-width: 42em;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+  }
+
+  h1 { margin-top: 0; }
+
+  section {
+    padding: 2rem 0;
+    border-top: 1px solid #262c3a;
+    opacity: 0;
+    transform: translateY(24px);
+    animation: reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+
+  section:first-of-type { border-top: none; }
+
+  @keyframes reveal {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  p { line-height: 1.6; color: #c3c9d6; }
+  code { color: #14b8a6; }
+
+  .fallback-note {
+    display: none;
+    background: #1f2530;
+    border: 1px solid #3a4356;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+    color: #e6b673;
+  }
+
+  @supports not (animation-timeline: scroll()) {
+    .fallback-note { display: block; }
+    .progress-bar, section { animation: none; opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="progress-track"><div class="progress-bar"></div></div>
+<main>
+  <h1>Scroll-Driven, Zero-JS</h1>
+  <p class="fallback-note">
+    Your browser doesn't support CSS scroll-driven animations — this demo is falling back to a
+    static, always-visible layout instead of silently breaking.
+  </p>
+  <p>
+    The bar at the very top of the page is a plain <code>&lt;div&gt;</code> scaled with a normal
+    <code>@keyframes</code> animation — except its timeline isn't time, it's
+    <code>animation-timeline: scroll(root block)</code>, so scroll position drives the
+    <code>0%</code>–<code>100%</code> keyframe progress directly instead of a
+    <code>scroll</code> event listener computing <code>scrollY / scrollHeight</code> on every frame.
+  </p>
+  <section>
+    <h2>Section one</h2>
+    <p>
+      Each section below fades and slides in via <code>animation-timeline: view()</code>, a
+      per-element timeline tied to how far that element has scrolled through the viewport —
+      no <code>IntersectionObserver</code> in sight. <code>animation-range: entry 0% cover 30%</code>
+      scopes the keyframe to just the entry transition.
+    </p>
+  </section>
+  <section>
+    <h2>Section two</h2>
+    <p>
+      Both timelines are driven entirely by the compositor thread, so scrolling stays smooth even
+      on a heavy page — there's no main-thread JS recalculating styles per scroll tick at all.
+    </p>
+  </section>
+  <section>
+    <h2>Section three</h2>
+    <p>
+      Keep scrolling — the top bar keeps tracking overall progress while each section re-plays
+      its own entry animation independently the moment it comes into view.
+    </p>
+  </section>
+  <section>
+    <h2>Section four</h2>
+    <p>
+      Support: Chromium has shipped this since 2023; Firefox and Safari are following via the
+      same spec. The <code>@supports not (animation-timeline: scroll())</code> block above swaps
+      in a static fallback rather than leaving unsupported browsers looking broken.
+    </p>
+  </section>
+</main>
+</body>
+</html>
