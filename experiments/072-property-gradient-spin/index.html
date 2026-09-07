@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>072 — @property Gradient Spin</title>
+<style>
+  @property --angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+
+  @property --stop {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 0%;
+  }
+
+  :root {
+    color-scheme: light dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    gap: 2rem;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0b0e14;
+    color: #e6e9ef;
+  }
+
+  main {
+    display: grid;
+    place-items: center;
+    gap: 2.5rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  p.note {
+    max-width: 36em;
+    color: #8b93a7;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .card {
+    --angle: 0deg;
+    --stop: 35%;
+    width: min(360px, 80vw);
+    aspect-ratio: 4 / 3;
+    border-radius: 20px;
+    padding: 3px;
+    background: conic-gradient(from var(--angle), #14b8a6, #6366f1 var(--stop), #f97316, #14b8a6);
+    animation: spin 6s linear infinite, breathe 3s ease-in-out infinite alternate;
+  }
+
+  .card:hover,
+  .card:focus-within {
+    animation-play-state: paused;
+  }
+
+  .card-inner {
+    height: 100%;
+    border-radius: 17px;
+    background: #12151d;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+  }
+
+  .card-inner h1 {
+    margin: 0 0 0.4rem;
+    font-size: 1.4rem;
+  }
+
+  .card-inner p {
+    margin: 0;
+    color: #8b93a7;
+    font-size: 0.9rem;
+  }
+
+  @keyframes spin {
+    to { --angle: 360deg; }
+  }
+
+  @keyframes breathe {
+    from { --stop: 20%; }
+    to   { --stop: 55%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="card" tabindex="0">
+    <div class="card-inner">
+      <h1>@property</h1>
+      <p>Typed custom properties, animated natively</p>
+    </div>
+  </div>
+  <p class="note">
+    The conic-gradient's rotation (<code>--angle</code>) and inner color stop (<code>--stop</code>)
+    are both registered via <code>@property</code> with a real <code>&lt;angle&gt;</code>/<code>&lt;percentage&gt;</code>
+    syntax. That's what makes them animatable by the browser's own interpolation in a
+    <code>@keyframes</code> block — an un-registered custom property can only ever jump between
+    values, never tween through them. No JS, no repainting per frame; hover or focus the card to
+    pause both animations via <code>animation-play-state</code>.
+  </p>
+</main>
+</body>
+</html>
