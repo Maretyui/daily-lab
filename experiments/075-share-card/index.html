@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>075 — Share Card</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 640px;
+    margin: 0 auto 2rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+  main {
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .card h2 {
+    margin: 0;
+    font-size: 1.15rem;
+  }
+  .card p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.5;
+    font-size: 0.9rem;
+  }
+  .card-url {
+    font-size: 0.8rem;
+    color: var(--a);
+    word-break: break-all;
+  }
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    border: none;
+    color: #06120f;
+    font-weight: 600;
+    padding: 0.65rem 1rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  button:focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
+  }
+  [role="status"] {
+    min-height: 1.2rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  [role="status"].ok { color: var(--a); }
+</style>
+</head>
+<body>
+<header>
+  <h1>075 — Share Card</h1>
+  <p>
+    A single share button that calls the real
+    <code>navigator.share()</code> API when the browser and context
+    (HTTPS, a real user gesture) support it, and falls back to
+    copying the link to the clipboard everywhere else — desktop
+    Chrome/Firefox included, since they don't implement
+    <code>navigator.share()</code> at all as of this writing.
+  </p>
+</header>
+<main>
+  <div class="card">
+    <h2>Scroll-Timeline Progress</h2>
+    <p>
+      A page-progress bar and section reveals driven entirely by
+      CSS animation-timeline — no scroll listener, no
+      IntersectionObserver.
+    </p>
+    <span class="card-url" id="share-url"></span>
+    <button type="button" id="share-btn">Share this experiment</button>
+    <p role="status" id="share-status" aria-live="polite"></p>
+  </div>
+</main>
+<script>
+  const shareUrl = new URL(
+    "../073-scroll-timeline-progress/",
+    location.href
+  ).toString();
+  document.getElementById("share-url").textContent = shareUrl;
+
+  const btn = document.getElementById("share-btn");
+  const status = document.getElementById("share-status");
+
+  function announce(message, ok) {
+    status.textContent = message;
+    status.classList.toggle("ok", Boolean(ok));
+  }
+
+  btn.addEventListener("click", async () => {
+    const shareData = {
+      title: "daily-lab — Scroll-Timeline Progress",
+      text: "A CSS-only scroll progress bar, no JS scroll listener.",
+      url: shareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        announce("Shared.", true);
+      } catch (err) {
+        // AbortError just means the user closed the native share
+        // sheet without picking anything — not a real failure.
+        if (err.name !== "AbortError") {
+          announce("Share failed — link copied instead.", false);
+          await copyFallback();
+        }
+      }
+      return;
+    }
+
+    await copyFallback();
+  });
+
+  async function copyFallback() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      announce("Link copied to clipboard.", true);
+    } catch {
+      announce("Couldn't copy automatically — select the link above.", false);
+    }
+  }
+</script>
+</body>
+</html>
