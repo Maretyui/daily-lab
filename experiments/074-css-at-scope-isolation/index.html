@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>074 — @scope Style Isolation</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 760px;
+    margin: 0 auto 2rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 0.5rem 0.9rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  button[aria-pressed="true"] {
+    border-color: var(--a);
+    color: var(--a);
+  }
+
+  /*
+    The outer "card" widget contains a nested "note" widget. Both
+    reuse the exact same generic class names (.label / .value) on
+    purpose — the whole point of this demo is what happens to that
+    nested widget when the outer widget's styling is written two
+    different ways.
+  */
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    background: var(--card);
+  }
+  .card .label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+  }
+  .card .value {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+  .note {
+    margin-top: 1rem;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+  }
+
+  /* @scope mode (default): the donut runs from .card-scoped down to,
+     but not including, .note — so .note's own .label/.value never
+     get painted the card's accent color, even though .note lives
+     inside .card-scoped in the DOM. */
+  @scope (.card-scoped) to (.note) {
+    :scope { border-color: var(--a); }
+    .label { color: var(--a); }
+    .value { color: var(--a); }
+  }
+
+  /* Legacy mode: a plain descendant selector has no concept of a
+     boundary — it matches .label/.value anywhere under .card-legacy,
+     nested widget included, so the note's text gets the card's
+     accent color whether that was intended or not. */
+  body.legacy .card-legacy .label { color: var(--b); }
+  body.legacy .card-legacy .value { color: var(--b); }
+  body:not(.legacy) .card-legacy .label,
+  body:not(.legacy) .card-legacy .value { color: var(--fg); }
+
+  .fallback-note {
+    display: none;
+    border: 1px dashed #f59e0b;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    color: #f59e0b;
+    font-size: 0.85rem;
+  }
+  @supports not (selector(:scope) and (color: red)) {
+    .fallback-note { display: block; }
+  }
+  code {
+    background: var(--card);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>074 — @scope Style Isolation</h1>
+  <p>
+    <code>.card-scoped</code> contains a nested <code>.note</code>
+    widget, and both reuse the same generic class names
+    (<code>.label</code>, <code>.value</code>). The card's colors are
+    set with <code>@scope (.card-scoped) to (.note)</code>, so the
+    scope stops right at the nested widget's boundary — the note
+    stays untouched even though it's a DOM descendant of the card.
+    The button below shows the same markup styled the "old" way, with
+    a plain descendant selector that has no boundary and bleeds into
+    the nested widget.
+  </p>
+</header>
+<main>
+  <div class="toolbar">
+    <button type="button" id="mode-toggle" aria-pressed="false">
+      Show legacy (descendant selector, no boundary)
+    </button>
+  </div>
+
+  <p class="fallback-note">
+    Your browser doesn't support <code>@scope</code> — the scoped
+    card below will render unstyled since this demo intentionally has
+    no JS fallback for it.
+  </p>
+
+  <div class="card card-scoped">
+    <span class="label">Deploy status</span>
+    <span class="value">Healthy</span>
+    <div class="note">
+      <span class="label">Note</span>
+      <span class="value">Last checked 4 minutes ago</span>
+    </div>
+  </div>
+
+  <div class="card card-legacy">
+    <span class="label">Deploy status</span>
+    <span class="value">Healthy</span>
+    <div class="note">
+      <span class="label">Note</span>
+      <span class="value">Last checked 4 minutes ago</span>
+    </div>
+  </div>
+</main>
+<script>
+  const toggle = document.getElementById("mode-toggle");
+  toggle.addEventListener("click", () => {
+    const isLegacy = document.body.classList.toggle("legacy");
+    toggle.setAttribute("aria-pressed", String(isLegacy));
+    toggle.textContent = isLegacy
+      ? "Hide legacy styling"
+      : "Show legacy (descendant selector, no boundary)";
+  });
+</script>
+</body>
+</html>
