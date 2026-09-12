@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>076 — Screen Color Picker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 640px;
+    margin: 0 auto 2rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    border: none;
+    color: #06120f;
+    font-weight: 600;
+    padding: 0.65rem 1rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+  button:disabled {
+    background: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  button:focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
+  }
+  [role="status"] {
+    min-height: 1.2rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  [role="status"].ok { color: var(--a); }
+  ul#palette {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  ul#palette li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.5rem 0.6rem;
+  }
+  .swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .swatch-text {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.8rem;
+    flex-grow: 1;
+    min-width: 0;
+  }
+  .swatch-text code {
+    color: var(--fg);
+  }
+  .swatch-text small {
+    color: var(--muted);
+  }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 0.35rem 0.6rem;
+    font-size: 0.75rem;
+  }
+  .empty {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>076 — Screen Color Picker</h1>
+  <p>
+    Uses the real <code>window.EyeDropper</code> API — no canvas
+    trickery, no hand-rolled color wheel — to sample the exact color
+    of any pixel on screen, including outside the browser window
+    itself, and builds a running, copyable swatch history.
+  </p>
+</header>
+<main>
+  <div class="card">
+    <button type="button" id="pick-btn">Pick a color from screen</button>
+    <p role="status" id="status" aria-live="polite"></p>
+    <ul id="palette"></ul>
+    <p class="empty" id="empty-msg">No colors picked yet.</p>
+  </div>
+</main>
+<script>
+  const btn = document.getElementById("pick-btn");
+  const status = document.getElementById("status");
+  const palette = document.getElementById("palette");
+  const emptyMsg = document.getElementById("empty-msg");
+
+  function announce(message, ok) {
+    status.textContent = message;
+    status.classList.toggle("ok", Boolean(ok));
+  }
+
+  if (!("EyeDropper" in window)) {
+    btn.disabled = true;
+    announce(
+      "EyeDropper isn't supported in this browser (it's Chromium-only as of this writing) — try Chrome or Edge.",
+      false
+    );
+  }
+
+  btn.addEventListener("click", async () => {
+    const eyeDropper = new EyeDropper();
+    try {
+      const result = await eyeDropper.open();
+      addSwatch(result.sRGBHex);
+      announce(`Picked ${result.sRGBHex}.`, true);
+    } catch (err) {
+      // The user pressed Escape or clicked away — not a real failure.
+      if (err.name !== "AbortError") {
+        announce("Couldn't read that pixel — try again.", false);
+      }
+    }
+  });
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+  }
+
+  function addSwatch(hex) {
+    emptyMsg.hidden = true;
+    const li = document.createElement("li");
+
+    const swatch = document.createElement("span");
+    swatch.className = "swatch";
+    swatch.style.background = hex;
+
+    const text = document.createElement("span");
+    text.className = "swatch-text";
+    const code = document.createElement("code");
+    code.textContent = hex;
+    const small = document.createElement("small");
+    small.textContent = hexToRgb(hex);
+    text.append(code, small);
+
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "copy-btn";
+    copyBtn.textContent = "Copy";
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(hex);
+        announce(`Copied ${hex} to clipboard.`, true);
+      } catch {
+        announce("Couldn't copy automatically — select the text above.", false);
+      }
+    });
+
+    li.append(swatch, text, copyBtn);
+    palette.prepend(li);
+  }
+</script>
+</body>
+</html>
