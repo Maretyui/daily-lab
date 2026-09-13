@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>077 — Anchor Positioning Tooltip</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 640px;
+    margin: 0 auto 2rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    background: var(--card);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: space-between;
+  }
+  .anchor-btn {
+    anchor-name: --btn;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .anchor-btn:hover,
+  .anchor-btn:focus-visible {
+    border-color: var(--a);
+    color: var(--a);
+  }
+  .tooltip {
+    position: fixed;
+    position-anchor: --btn;
+    position-area: top;
+    position-try-fallbacks: flip-block, flip-inline;
+    margin: 0 0 0.5rem;
+    background: #06120f;
+    color: var(--a);
+    border: 1px solid var(--a);
+    border-radius: 8px;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    opacity: 0;
+    transform: scale(0.85);
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease,
+      display 0.15s allow-discrete,
+      overlay 0.15s allow-discrete;
+  }
+  .anchor-btn:hover + .tooltip,
+  .anchor-btn:focus-visible + .tooltip {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .fallback-note {
+    width: 100%;
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    margin-top: 0.5rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>077 — Anchor Positioning Tooltip</h1>
+  <p>
+    Every tooltip below is glued to its own button purely through CSS
+    anchor positioning — <code>anchor-name</code> on the trigger,
+    <code>position-anchor</code>/<code>position-area</code> on the
+    popup, and <code>position-try-fallbacks</code> to flip the
+    tooltip to the other side when it would otherwise clip past the
+    viewport edge. No <code>getBoundingClientRect()</code>, no resize
+    listener, no JS positioning math at all.
+  </p>
+</header>
+<main>
+  <div class="card">
+    <button type="button" class="anchor-btn" style="anchor-name: --btn-a">
+      Hover me (top edge)
+    </button>
+    <div class="tooltip" style="position-anchor: --btn-a">Anchored above</div>
+
+    <button type="button" class="anchor-btn" style="anchor-name: --btn-b">
+      Hover me (bottom edge)
+    </button>
+    <div
+      class="tooltip"
+      style="position-anchor: --btn-b; position-area: bottom; margin: 0.5rem 0 0"
+    >
+      Anchored below
+    </div>
+
+    <button type="button" class="anchor-btn" style="anchor-name: --btn-c">
+      Resize the window narrow, then hover
+    </button>
+    <div class="tooltip" style="position-anchor: --btn-c">
+      Flips side automatically if this would clip
+    </div>
+
+    <p class="fallback-note">
+      Anchor positioning currently ships in Chromium (125+); browsers
+      without it just never move the tooltip off its default fixed
+      position and it stays invisible at opacity 0 — a safe,
+      unremarkable fallback rather than a broken layout.
+    </p>
+  </div>
+</main>
+</body>
+</html>
