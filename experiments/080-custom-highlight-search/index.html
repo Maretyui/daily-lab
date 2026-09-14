@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>080 — Custom Highlight API Search</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 640px;
+    margin: 0 auto 2rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  input[type="search"] {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--fg);
+    font: inherit;
+    padding: 0.65rem 0.9rem;
+  }
+  input[type="search"]:focus-visible {
+    outline: 2px solid var(--a);
+    outline-offset: 1px;
+  }
+  #match-count {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  #passage {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.1rem 1.25rem;
+    line-height: 1.7;
+  }
+  ::highlight(search-results) {
+    background-color: color-mix(in srgb, var(--a) 55%, transparent);
+    color: #08110f;
+  }
+  .no-support-note {
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>080 — Custom Highlight API Search</h1>
+  <p>
+    Typing below highlights every match inside the passage using the
+    <code>CSS Custom Highlight API</code> — <code>Range</code> objects are
+    registered into a <code>Highlight</code> and styled entirely through
+    the <code>::highlight()</code> pseudo, with no wrapper
+    <code>&lt;mark&gt;</code> elements injected into the DOM and no
+    layout reflow from mutating text nodes.
+  </p>
+</header>
+<main>
+  <input type="search" id="query" placeholder="Search the passage below…" autocomplete="off">
+  <p id="match-count" aria-live="polite"></p>
+  <p id="passage">
+    The CSS Custom Highlight API lets script-driven text ranges be
+    styled without touching the document tree at all. Traditional
+    search-highlighting wraps every match in a span or mark element,
+    which mutates the DOM, can split existing elements awkwardly, and
+    has to be carefully undone when the search term changes. A
+    Highlight object instead holds a live list of Range instances,
+    registered once via CSS.highlights.set, and the browser paints
+    them directly during layout. Clearing a search is just deleting
+    the ranges, not diffing DOM nodes back to their original shape.
+  </p>
+  <p class="no-support-note" id="support-note"></p>
+</main>
+<script>
+  const input = document.getElementById("query");
+  const passage = document.getElementById("passage");
+  const countEl = document.getElementById("match-count");
+  const supportNote = document.getElementById("support-note");
+
+  const supported = "highlights" in CSS && typeof Highlight === "function";
+  supportNote.textContent = supported
+    ? ""
+    : "CSS.highlights / the Highlight constructor isn't supported here — matches are counted but not visually highlighted in this browser.";
+
+  function findRanges(root, term) {
+    if (!term) return [];
+    const ranges = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const needle = term.toLowerCase();
+    let node;
+    while ((node = walker.nextNode())) {
+      const text = node.textContent.toLowerCase();
+      let from = 0;
+      let idx;
+      while ((idx = text.indexOf(needle, from)) !== -1) {
+        const range = new Range();
+        range.setStart(node, idx);
+        range.setEnd(node, idx + needle.length);
+        ranges.push(range);
+        from = idx + needle.length;
+      }
+    }
+    return ranges;
+  }
+
+  input.addEventListener("input", () => {
+    const term = input.value.trim();
+    const ranges = findRanges(passage, term);
+
+    if (supported) {
+      if (ranges.length) {
+        CSS.highlights.set("search-results", new Highlight(...ranges));
+      } else {
+        CSS.highlights.delete("search-results");
+      }
+    }
+
+    countEl.textContent = term
+      ? `${ranges.length} match${ranges.length === 1 ? "" : "es"}`
+      : "";
+  });
+</script>
+</body>
+</html>
