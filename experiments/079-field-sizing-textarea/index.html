@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>079 — field-sizing: content Textarea</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 640px;
+    margin: 0 auto 2rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 60ch;
+  }
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .field label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .field textarea {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--fg);
+    font: inherit;
+    padding: 0.75rem 0.9rem;
+    line-height: 1.5;
+  }
+  .field textarea:focus-visible {
+    outline: 2px solid var(--a);
+    outline-offset: 1px;
+  }
+  .grow {
+    field-sizing: content;
+    min-height: 2.6rem;
+    max-height: 12rem;
+    resize: none;
+  }
+  .manual {
+    height: 2.6rem;
+    resize: vertical;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+  code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>079 — field-sizing: content Textarea</h1>
+  <p>
+    The top textarea grows and shrinks with its content purely via
+    <code>field-sizing: content</code> — no <code>input</code> listener
+    measuring <code>scrollHeight</code>, no cloned mirror element. The
+    bottom one is a plain textarea for comparison, stuck at its
+    starting height until you drag its resize handle.
+  </p>
+</header>
+<main>
+  <div class="field">
+    <label for="grow">Auto-sized (field-sizing: content)</label>
+    <textarea id="grow" class="grow" placeholder="Type a few lines and watch it grow…" rows="1"></textarea>
+  </div>
+  <div class="field">
+    <label for="manual">Plain textarea, for comparison</label>
+    <textarea id="manual" class="manual" placeholder="This one stays put." rows="1"></textarea>
+  </div>
+  <p class="note" id="support-note"></p>
+</main>
+<script>
+  const supported = CSS.supports("field-sizing", "content");
+  const note = document.getElementById("support-note");
+  note.textContent = supported
+    ? "field-sizing: content is supported here — the growth above is pure CSS."
+    : "field-sizing isn't supported in this browser, so the top field behaves like a normal fixed-height textarea until you resize the window/browser.";
+</script>
+</body>
+</html>
