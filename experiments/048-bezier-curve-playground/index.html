@@ -21,6 +21,7 @@
     min-height: 100vh;
     display: grid;
     place-items: center;
+    grid-template-columns: minmax(0, 1fr);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--text);
@@ -38,6 +39,8 @@
   a.back:hover { color: var(--text); }
 
   main {
+    max-width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -49,6 +52,8 @@
   h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
 
   canvas#curve {
+    max-width: 100%;
+    height: auto;
     border-radius: 16px;
     background: var(--card);
     touch-action: none;
@@ -68,7 +73,7 @@
 
   .track {
     width: 420px;
-    max-width: 90vw;
+    max-width: 100%;
     height: 14px;
     background: #0f1420;
     border-radius: 999px;
@@ -186,16 +191,26 @@
   }
 
   let dragging = null; // 'p1' | 'p2' | null
+  // Pointer position in canvas units; the canvas is scaled down by CSS on narrow screens.
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * canvas.width / rect.width,
+      y: (e.clientY - rect.top) * canvas.height / rect.height,
+    };
+  }
+
   function hitTest(x, y) {
     const c1 = toCanvas(p1), c2 = toCanvas(p2);
-    if (Math.hypot(x - c1.x, y - c1.y) < 12) return 'p1';
-    if (Math.hypot(x - c2.x, y - c2.y) < 12) return 'p2';
+    // keep the grab radius at 12 CSS pixels even when the canvas is shrunk
+    const r = 12 * Math.max(1, canvas.width / canvas.getBoundingClientRect().width);
+    if (Math.hypot(x - c1.x, y - c1.y) < r) return 'p1';
+    if (Math.hypot(x - c2.x, y - c2.y) < r) return 'p2';
     return null;
   }
 
   canvas.addEventListener('pointerdown', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    const { x, y } = pointerPos(e);
     dragging = hitTest(x, y);
     if (dragging) {
       canvas.classList.add('grabbing');
@@ -204,8 +219,8 @@
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!dragging) return;
-    const rect = canvas.getBoundingClientRect();
-    const p = toCurveSpace(e.clientX - rect.left, e.clientY - rect.top);
+    const { x, y } = pointerPos(e);
+    const p = toCurveSpace(x, y);
     if (dragging === 'p1') p1 = p; else p2 = p;
     draw();
   });

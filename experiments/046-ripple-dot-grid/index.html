@@ -21,6 +21,7 @@
     min-height: 100vh;
     display: grid;
     place-items: center;
+    grid-template-columns: minmax(0, 1fr);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--text);
@@ -38,6 +39,8 @@
   a.back:hover { color: var(--text); }
 
   main {
+    max-width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -49,6 +52,8 @@
   h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
 
   canvas#grid {
+    max-width: 100%;
+    height: auto;
     border-radius: 16px;
     background: var(--card);
     touch-action: none;
@@ -83,13 +88,21 @@
     if (ripples.length > 5) ripples.shift();
   }
 
-  canvas.addEventListener('pointermove', (e) => {
+  // The canvas is scaled down by CSS on narrow screens, so convert the
+  // pointer position from CSS pixels into canvas units.
+  function toCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
-    addRipple(e.clientX - rect.left, e.clientY - rect.top);
+    return [
+      (e.clientX - rect.left) * canvas.width / rect.width,
+      (e.clientY - rect.top) * canvas.height / rect.height,
+    ];
+  }
+
+  canvas.addEventListener('pointermove', (e) => {
+    addRipple(...toCanvasCoords(e));
   });
   canvas.addEventListener('pointerdown', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    addRipple(e.clientX - rect.left, e.clientY - rect.top);
+    addRipple(...toCanvasCoords(e));
   });
 
   function draw(now) {
