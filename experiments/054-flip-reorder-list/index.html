@@ -21,6 +21,7 @@
     min-height: 100vh;
     display: grid;
     place-items: center;
+    grid-template-columns: minmax(0, 1fr);
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--text);
@@ -37,6 +38,8 @@
   a.back:hover { color: var(--text); }
 
   main {
+    max-width: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -57,7 +60,7 @@
     margin: 0;
     padding: 0;
     width: 320px;
-    max-width: 90vw;
+    max-width: 100%;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -94,6 +97,8 @@
     color: var(--muted);
     max-width: 440px;
   }
+  /* let a finger drag a row instead of scrolling the page */
+  #list li { touch-action: none; }
 </style>
 </head>
 <body>
@@ -172,6 +177,36 @@
 
     playFlip(before);
   });
+  // Touch screens don't fire HTML5 drag-and-drop events, so reorder with
+  // pointer events for touch and pen input, using the same FLIP animation.
+  list.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;
+    draggingEl = e.target.closest('li');
+    if (!draggingEl) return;
+    draggingEl.classList.add('dragging');
+    draggingEl.setPointerCapture(e.pointerId);
+  });
+
+  list.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse' || !draggingEl) return;
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('#list li');
+    if (!target || target === draggingEl) return;
+
+    const before = measurePositions();
+    const rect = target.getBoundingClientRect();
+    const after = (e.clientY - rect.top) / rect.height > 0.5;
+    list.insertBefore(draggingEl, after ? target.nextSibling : target);
+    playFlip(before);
+  });
+
+  function endPointerDrag(e) {
+    if (e.pointerType === 'mouse') return;
+    draggingEl?.classList.remove('dragging');
+    draggingEl = null;
+  }
+
+  list.addEventListener('pointerup', endPointerDrag);
+  list.addEventListener('pointercancel', endPointerDrag);
 </script>
 </body>
 </html>
