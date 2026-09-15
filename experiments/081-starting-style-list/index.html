@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>081 — @starting-style Filtered List</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 640px;
+    margin: 0 auto 2rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .filters {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+  .filters button {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 0.45rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .filters button[aria-pressed="true"] {
+    background: var(--a);
+    color: #04211d;
+    border-color: var(--a);
+    font-weight: 600;
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+  }
+  li {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+
+    /* the whole point: this element enters/exits with a real transition,
+       driven purely by CSS, with no JS measuring or delaying anything */
+    transition: opacity 0.28s ease, transform 0.28s ease, height 0.28s ease;
+    interpolate-size: allow-keywords;
+    overflow: clip;
+  }
+  li[hidden] {
+    display: none;
+  }
+  /* the entry state: applies for one frame when an element that was
+     display:none becomes visible again (or is newly inserted) */
+  @starting-style {
+    li:not([hidden]) {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+  }
+  li.leaving {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    height: 0;
+    padding-block: 0;
+    margin-block: 0;
+    border-width: 0;
+  }
+  .tag {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    flex-shrink: 0;
+  }
+  footer {
+    max-width: 640px;
+    margin: 2.5rem auto 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  footer a { color: var(--a); }
+  code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>081 — @starting-style Filtered List</h1>
+  <p>
+    Filtering a list normally means items just snap in and out. Here every
+    add/remove animates via the CSS <code>@starting-style</code> at-rule —
+    no JS-driven class juggling, no <code>setTimeout</code> to "wait for the
+    animation to finish" before hiding an element.
+  </p>
+</header>
+<main>
+  <div class="filters" role="group" aria-label="Filter by tag">
+    <button type="button" data-filter="all" aria-pressed="true">All</button>
+    <button type="button" data-filter="css" aria-pressed="false">CSS</button>
+    <button type="button" data-filter="js" aria-pressed="false">JS</button>
+    <button type="button" data-filter="api" aria-pressed="false">API</button>
+  </div>
+  <ul id="list">
+    <li data-tags="css"><span>text-wrap: balance</span><span class="tag">css</span></li>
+    <li data-tags="api js"><span>View Transitions API</span><span class="tag">api</span></li>
+    <li data-tags="css"><span>:has() selector</span><span class="tag">css</span></li>
+    <li data-tags="js api"><span>Highlight API</span><span class="tag">api</span></li>
+    <li data-tags="css js"><span>@scope isolation</span><span class="tag">css</span></li>
+    <li data-tags="js"><span>structuredClone()</span><span class="tag">js</span></li>
+    <li data-tags="css api"><span>anchor-positioning</span><span class="tag">css</span></li>
+  </ul>
+</main>
+<footer>
+  Part of <a href="../../">daily-lab</a>. Browser support: Chromium and
+  Firefox 129+; Safari does not yet support <code>@starting-style</code>
+  (the list still filters correctly, just without the transition).
+</footer>
+<script>
+  const list = document.getElementById('list');
+  const items = [...list.children];
+  const buttons = document.querySelectorAll('.filters button');
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      buttons.forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+      const filter = btn.dataset.filter;
+
+      items.forEach(li => {
+        const matches = filter === 'all' || li.dataset.tags.split(' ').includes(filter);
+        const isHidden = li.hasAttribute('hidden');
+
+        if (matches && isHidden) {
+          li.removeAttribute('hidden');
+          // reading a layout property forces the browser to commit the
+          // @starting-style frame before the transition target applies
+          li.offsetHeight;
+        } else if (!matches && !isHidden) {
+          li.classList.add('leaving');
+          li.addEventListener('transitionend', () => {
+            li.setAttribute('hidden', '');
+            li.classList.remove('leaving');
+          }, { once: true });
+        }
+      });
+    });
+  });
+</script>
+</body>
+</html>
