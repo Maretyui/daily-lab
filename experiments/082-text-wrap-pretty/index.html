@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>082 — text-wrap: pretty vs balance</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --fg: #e6e9ef;
+    --muted: #8b93a7;
+    --card: #12161f;
+    --border: #1f2530;
+    --a: #14b8a6;
+    --b: #6366f1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 2rem 1.25rem 4rem;
+  }
+  header {
+    max-width: 780px;
+    margin: 0 auto 1.5rem;
+  }
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.4rem;
+    background: linear-gradient(90deg, var(--a), var(--b));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p {
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 780px;
+    margin: 0 auto;
+  }
+  .width-control {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .width-control input {
+    flex: 1;
+    accent-color: var(--a);
+  }
+  .width-control output {
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+    width: 4.5ch;
+  }
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .col {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    min-width: 0;
+  }
+  .col h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--a);
+    margin: 0 0 0.75rem;
+  }
+  .stage {
+    resize: horizontal;
+    overflow: auto;
+    max-width: 100%;
+    min-width: 8rem;
+    border: 1px dashed var(--border);
+    padding: 0.75rem;
+    border-radius: 6px;
+  }
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.2rem;
+    line-height: 1.25;
+  }
+  .wrap-normal   h3 { text-wrap: wrap; }
+  .wrap-balance  h3 { text-wrap: balance; }
+  .wrap-pretty   h3 { text-wrap: pretty; }
+  p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.5;
+    font-size: 0.9rem;
+  }
+  .wrap-normal   p { text-wrap: wrap; }
+  .wrap-pretty   p { text-wrap: pretty; }
+  footer {
+    max-width: 780px;
+    margin: 2.5rem auto 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  footer a { color: var(--a); }
+  code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+  }
+  @media (max-width: 640px) {
+    .columns { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>082 — text-wrap: pretty vs balance</h1>
+  <p>
+    Drag any panel's own resize handle (bottom-right corner) narrower and
+    watch how each wrapping mode avoids ugly single-word orphan lines —
+    or doesn't. No JS measures anything here; it's three CSS keywords.
+  </p>
+</header>
+<main>
+  <div class="columns">
+    <div class="col wrap-normal">
+      <h2>text-wrap: wrap (default)</h2>
+      <div class="stage">
+        <h3>Custom Highlight API Search Demo</h3>
+        <p>
+          Greedy line-breaking fills each line as full as possible, which
+          often leaves a short orphan word dangling alone on the last line.
+        </p>
+      </div>
+    </div>
+    <div class="col wrap-balance">
+      <h2>text-wrap: balance</h2>
+      <div class="stage">
+        <h3>Custom Highlight API Search Demo</h3>
+        <p>
+          Balances line lengths evenly across a block. Great for headings,
+          but browsers cap it around 4 lines — not meant for body copy.
+        </p>
+      </div>
+    </div>
+    <div class="col wrap-pretty">
+      <h2>text-wrap: pretty</h2>
+      <div class="stage">
+        <h3>Custom Highlight API Search Demo</h3>
+        <p>
+          Slower, paragraph-aware algorithm that specifically avoids
+          orphans on the final line, with no line-count limit — the
+          better default for body text.
+        </p>
+      </div>
+    </div>
+  </div>
+</main>
+<footer>
+  Part of <a href="../../">daily-lab</a>. Browser support: Chromium 117+ for
+  <code>balance</code>, Chromium 130+ and Firefox 141+ for <code>pretty</code>;
+  Safari supports neither yet and silently falls back to normal wrapping.
+</footer>
+</body>
+</html>
