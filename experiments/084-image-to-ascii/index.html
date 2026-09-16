@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>084 — Image to ASCII Art</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 6rem 1.25rem 8rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+    margin: 0;
+  }
+
+  .dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 2rem 1rem;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    background: var(--card);
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .dropzone.drag-over { border-color: var(--accent); color: var(--accent); }
+  .dropzone strong { color: var(--text); }
+  .dropzone input { display: none; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+  }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .control-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .control-row output {
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    width: 3ch;
+  }
+  .control-row label.checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+  }
+  input[type="checkbox"] { accent-color: var(--accent); width: 1.1rem; height: 1.1rem; }
+
+  .output-wrap {
+    background: #05070c;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 0.75rem;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  pre#asciiOut {
+    margin: 0;
+    line-height: 1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 6px;
+    white-space: pre;
+    color: var(--text);
+  }
+  pre#asciiOut:empty::before {
+    content: "Choose an image above to see it rendered as text.";
+    font-family: system-ui, sans-serif;
+    font-size: 0.85rem;
+    color: var(--muted);
+    white-space: normal;
+  }
+
+  button.action {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: inherit;
+    align-self: start;
+  }
+  button.action:hover { border-color: var(--accent); color: var(--accent); }
+  button.action:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Image to ASCII art</h1>
+    <p>
+      Drops an image onto an offscreen canvas at a tiny resolution, reads
+      each pixel's brightness back out with <code>getImageData()</code>,
+      and maps that brightness onto a character ramp — the same trick
+      text-mode image viewers used decades before CSS existed. Works
+      from a file picker (tap-friendly on phones, including the camera)
+      or by dragging a file in on desktop.
+    </p>
+
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <strong>Tap to choose an image</strong>
+      <span>or drag one in from the desktop</span>
+      <input type="file" id="fileInput" accept="image/*">
+    </label>
+
+    <div class="controls">
+      <div class="control-row">
+        <span>columns</span>
+        <input type="range" id="widthRange" min="40" max="160" step="5" value="90">
+        <output id="widthOut">90</output>
+      </div>
+      <div class="control-row">
+        <label class="checkbox">
+          <input type="checkbox" id="invertCheck">
+          invert brightness ramp
+        </label>
+      </div>
+      <div class="control-row">
+        <label class="checkbox">
+          <input type="checkbox" id="colorCheck">
+          keep original color per character
+        </label>
+      </div>
+      <button class="action" id="copyBtn" type="button" disabled>Copy as text</button>
+    </div>
+
+    <div class="output-wrap">
+      <pre id="asciiOut"></pre>
+    </div>
+  </main>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const widthRange = document.getElementById('widthRange');
+    const widthOut = document.getElementById('widthOut');
+    const invertCheck = document.getElementById('invertCheck');
+    const colorCheck = document.getElementById('colorCheck');
+    const copyBtn = document.getElementById('copyBtn');
+    const asciiOut = document.getElementById('asciiOut');
+
+    const RAMP = " .:-=+*#%@";
+    let currentImage = null;
+
+    function render() {
+      if (!currentImage) return;
+
+      const cols = Number(widthRange.value);
+      const aspectCorrection = 0.55; // monospace glyphs are taller than wide
+      const rows = Math.max(1, Math.round((currentImage.height / currentImage.width) * cols * aspectCorrection));
+
+      const off = document.createElement('canvas');
+      off.width = cols;
+      off.height = rows;
+      const octx = off.getContext('2d', { willReadFrequently: true });
+      octx.drawImage(currentImage, 0, 0, cols, rows);
+      const { data } = octx.getImageData(0, 0, cols, rows);
+
+      const useColor = colorCheck.checked;
+      const invert = invertCheck.checked;
+      let html = '';
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const i = (y * cols + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          let brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          if (invert) brightness = 1 - brightness;
+          const char = RAMP[Math.min(RAMP.length - 1, Math.floor(brightness * RAMP.length))];
+          const safeChar = char === ' ' ? '&nbsp;' : char;
+          html += useColor ? `<span style="color:rgb(${r},${g},${b})">${safeChar}</span>` : safeChar;
+        }
+        html += '\n';
+      }
+      asciiOut.innerHTML = html;
+      copyBtn.disabled = false;
+    }
+
+    function loadFile(file) {
+      if (!file || !file.type.startsWith('image/')) return;
+      const img = new Image();
+      img.onload = () => {
+        currentImage = img;
+        render();
+      };
+      img.src = URL.createObjectURL(file);
+    }
+
+    fileInput.addEventListener('change', () => loadFile(fileInput.files[0]));
+
+    ['dragover', 'dragenter'].forEach((evt) =>
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('drag-over');
+      })
+    );
+    ['dragleave', 'dragend', 'drop'].forEach((evt) =>
+      dropzone.addEventListener(evt, () => dropzone.classList.remove('drag-over'))
+    );
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      loadFile(e.dataTransfer.files[0]);
+    });
+
+    widthRange.addEventListener('input', () => {
+      widthOut.textContent = widthRange.value;
+      render();
+    });
+    invertCheck.addEventListener('change', render);
+    colorCheck.addEventListener('change', render);
+
+    copyBtn.addEventListener('click', async () => {
+      const text = asciiOut.innerText;
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => (copyBtn.textContent = 'Copy as text'), 1200);
+      } catch {
+        copyBtn.textContent = 'Copy failed';
+      }
+    });
+  </script>
+</body>
+</html>
