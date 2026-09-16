@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>083 — Flow Field Particles</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+    --accent2: #f472b6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 6rem 1.25rem 8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    align-items: center;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    align-self: stretch;
+  }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+    align-self: stretch;
+    margin: 0;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-self: stretch;
+  }
+
+  button.action {
+    background: var(--card);
+    border: 1px solid #1f2530;
+    color: var(--text);
+    padding: 0.6rem 1.1rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: inherit;
+  }
+  button.action:hover { border-color: var(--accent); color: var(--accent); }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  input[type="range"] { accent-color: var(--accent); }
+
+  .canvas-wrap {
+    align-self: stretch;
+    width: 100%;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 3 / 2;
+    background: #05070c;
+    border: 1px solid #1f2530;
+    border-radius: 14px;
+    touch-action: none;
+    max-width: 100%;
+  }
+
+  .hint {
+    font-size: 0.78rem;
+    color: var(--muted);
+    align-self: stretch;
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <main>
+    <h1>Flow field particles</h1>
+    <p>
+      A grid of invisible angles — a "flow field" generated from stacked
+      sine waves rather than a random walk — steers a few hundred
+      short-lived particles. Each frame only paints a translucent black
+      rectangle over the last one instead of clearing it, which is what
+      turns individual particle steps into continuous flowing trails.
+      Press and drag (mouse or finger) to bend the field around your
+      pointer with a temporary vortex.
+    </p>
+
+    <div class="toolbar">
+      <button class="action" id="regenBtn" type="button">Reseed field</button>
+      <label class="field">
+        particles
+        <input type="range" id="countRange" min="80" max="600" step="20" value="300">
+      </label>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="flowCanvas" width="900" height="600"></canvas>
+    </div>
+
+    <p class="hint">
+      No external noise library — the field angle at each point comes
+      from three overlapping <code>sin()</code>/<code>cos()</code> waves
+      at different frequencies, which is enough to look organic without
+      ever repeating exactly.
+    </p>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('flowCanvas');
+    const ctx = canvas.getContext('2d');
+    const regenBtn = document.getElementById('regenBtn');
+    const countRange = document.getElementById('countRange');
+
+    const CELL = 24;
+    let cols, rows;
+    let seedOffset = { a: Math.random() * 1000, b: Math.random() * 1000, c: Math.random() * 1000 };
+    let particles = [];
+    let pointer = { x: -9999, y: -9999, active: false };
+    let t = 0;
+
+    function fieldAngle(x, y) {
+      const nx = x / canvas.width;
+      const ny = y / canvas.height;
+      let angle =
+        Math.sin(nx * 3 + seedOffset.a + t * 0.15) * Math.PI +
+        Math.cos(ny * 4 + seedOffset.b - t * 0.1) * Math.PI * 0.5 +
+        Math.sin((nx + ny) * 2.5 + seedOffset.c) * Math.PI * 0.3;
+
+      if (pointer.active) {
+        const dx = x - pointer.x;
+        const dy = y - pointer.y;
+        const dist = Math.hypot(dx, dy);
+        const radius = 220;
+        if (dist < radius) {
+          const pull = (1 - dist / radius);
+          const swirl = Math.atan2(dy, dx) + Math.PI / 2;
+          angle = angle * (1 - pull) + swirl * pull;
+        }
+      }
+      return angle;
+    }
+
+    function resetParticles() {
+      const count = Number(countRange.value);
+      particles = Array.from({ length: count }, spawnParticle);
+    }
+
+    function spawnParticle() {
+      return {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        life: 60 + Math.random() * 120,
+        hue: Math.random() < 0.5 ? '20, 184, 166' : '244, 114, 182',
+      };
+    }
+
+    function step() {
+      t += 1;
+      ctx.fillStyle = 'rgba(5, 7, 12, 0.12)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (const p of particles) {
+        const angle = fieldAngle(p.x, p.y);
+        const speed = 2.2;
+        const nx = p.x + Math.cos(angle) * speed;
+        const ny = p.y + Math.sin(angle) * speed;
+
+        ctx.strokeStyle = `rgba(${p.hue}, 0.55)`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+
+        p.x = nx;
+        p.y = ny;
+        p.life -= 1;
+
+        const offscreen = p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height;
+        if (p.life <= 0 || offscreen) Object.assign(p, spawnParticle());
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    function pointerPos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (evt.clientX - rect.left) * scaleX,
+        y: (evt.clientY - rect.top) * scaleY,
+      };
+    }
+
+    canvas.addEventListener('pointerdown', (evt) => {
+      pointer = { ...pointerPos(evt), active: true };
+      canvas.setPointerCapture(evt.pointerId);
+    });
+    canvas.addEventListener('pointermove', (evt) => {
+      if (!pointer.active) return;
+      pointer = { ...pointerPos(evt), active: true };
+    });
+    function releasePointer() { pointer.active = false; }
+    canvas.addEventListener('pointerup', releasePointer);
+    canvas.addEventListener('pointercancel', releasePointer);
+    canvas.addEventListener('pointerleave', releasePointer);
+
+    regenBtn.addEventListener('click', () => {
+      seedOffset = { a: Math.random() * 1000, b: Math.random() * 1000, c: Math.random() * 1000 };
+      ctx.fillStyle = '#05070c';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      resetParticles();
+    });
+    countRange.addEventListener('change', resetParticles);
+
+    ctx.fillStyle = '#05070c';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    resetParticles();
+    requestAnimationFrame(step);
+  </script>
+</body>
+</html>
