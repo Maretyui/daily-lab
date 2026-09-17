@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>085 — Scratch Card Reveal</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0e14;
+  --card: #151a24;
+  --text: #e6e9ef;
+  --muted: #8b93a7;
+  --border: #1f2530;
+  --accent: #14b8a6;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a.back {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+a.back:hover { color: var(--accent); }
+
+main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 6rem 1.25rem 8rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+h1 { margin: 0; font-size: 1.5rem; }
+
+main > p {
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 0;
+}
+
+.card-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--card);
+  touch-action: none;
+}
+
+.prize {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #14b8a6, #0891b2);
+  color: #06181a;
+}
+
+canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.status-row span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+button.action {
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+button.action:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+
+<main>
+  <h1>Scratch card reveal</h1>
+  <p>
+    A silver-foil canvas sits over the prize. Scratching erases pixels of the
+    foil layer via <code>globalCompositeOperation = "destination-out"</code>,
+    the same trick real photo-editing "eraser" tools use — no clip-path or
+    mask animation involved, the pixels are actually gone. Cleared-area
+    percentage is sampled from <code>getImageData()</code> on every stroke to
+    auto-reveal once you've scratched enough.
+  </p>
+
+  <div class="card-wrap" id="cardWrap">
+    <div class="prize" aria-hidden="true">🎁 You won 20%<br>off your next order</div>
+    <canvas id="foil" role="img" aria-label="Scratch card, currently covered. Scratch to reveal the prize underneath."></canvas>
+  </div>
+
+  <div class="status-row">
+    <span id="pctOut">0% scratched</span>
+    <button class="action" id="resetBtn">Reset foil</button>
+  </div>
+</main>
+
+<script>
+const wrap = document.getElementById('cardWrap');
+const canvas = document.getElementById('foil');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+const pctOut = document.getElementById('pctOut');
+const resetBtn = document.getElementById('resetBtn');
+
+let scratching = false;
+let revealed = false;
+
+function paintFoil() {
+  const { width, height } = canvas;
+  const grad = ctx.createLinearGradient(0, 0, width, height);
+  grad.addColorStop(0, '#c7ccd6');
+  grad.addColorStop(0.5, '#eef0f4');
+  grad.addColorStop(1, '#9aa0ad');
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.font = `${Math.round(height * 0.14)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Scratch here', width / 2, height / 2);
+}
+
+function sizeCanvas() {
+  const rect = wrap.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  paintFoil();
+  revealed = false;
+  pctOut.textContent = '0% scratched';
+  canvas.style.opacity = '1';
+}
+
+function pointFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) / rect.width * canvas.clientWidth,
+    y: (e.clientY - rect.top) / rect.height * canvas.clientHeight,
+  };
+}
+
+function scratchAt(x, y) {
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(x, y, 22, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function measureCleared() {
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let cleared = 0;
+  const total = data.length / 4;
+  for (let i = 3; i < data.length; i += 4 * 17) {
+    if (data[i] < 32) cleared++;
+  }
+  const sampled = Math.ceil(total / 17);
+  return Math.min(100, Math.round((cleared / sampled) * 100));
+}
+
+function updateProgress() {
+  const pct = measureCleared();
+  pctOut.textContent = `${pct}% scratched`;
+  if (pct >= 55 && !revealed) {
+    revealed = true;
+    canvas.style.transition = 'opacity 0.5s ease';
+    canvas.style.opacity = '0';
+  }
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  scratching = true;
+  canvas.setPointerCapture(e.pointerId);
+  const p = pointFromEvent(e);
+  scratchAt(p.x, p.y);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!scratching) return;
+  const p = pointFromEvent(e);
+  scratchAt(p.x, p.y);
+});
+canvas.addEventListener('pointerup', () => {
+  scratching = false;
+  updateProgress();
+});
+canvas.addEventListener('pointercancel', () => { scratching = false; });
+
+resetBtn.addEventListener('click', sizeCanvas);
+window.addEventListener('resize', sizeCanvas);
+sizeCanvas();
+</script>
+</body>
+</html>
