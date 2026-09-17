@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>086 — SVG Text on a Draggable Path</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0e14;
+  --card: #151a24;
+  --text: #e6e9ef;
+  --muted: #8b93a7;
+  --border: #1f2530;
+  --accent: #14b8a6;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+a.back {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+a.back:hover { color: var(--accent); }
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 6rem 1.25rem 8rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+h1 { margin: 0; font-size: 1.5rem; }
+
+main > p {
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 0;
+}
+
+.stage {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  padding: 0.5rem;
+}
+
+svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
+}
+
+#guidePath {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+}
+
+#handle {
+  fill: var(--accent);
+  cursor: grab;
+}
+#handle:active { cursor: grabbing; }
+
+#pathText {
+  fill: var(--text);
+  font-size: 26px;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+}
+
+.control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.control-row label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+label.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+
+<main>
+  <h1>SVG text on a draggable path</h1>
+  <p>
+    The text is a normal <code>&lt;text&gt;</code> element with a
+    <code>&lt;textPath&gt;</code> child pointing at a <code>&lt;path&gt;</code>
+    by id — the browser lays out and re-flows every glyph along that curve on
+    its own. Dragging the teal handle only ever rewrites the path's
+    <code>d</code> attribute (a single quadratic Bézier); the text reroutes
+    itself with no per-character math on this end.
+  </p>
+
+  <div class="stage">
+    <svg viewBox="0 0 400 220" role="img" aria-label="Curved text following a path you can drag to reshape">
+      <path id="guidePath" d="M30,170 Q200,60 370,170"></path>
+      <path id="textPath" d="M30,170 Q200,60 370,170" fill="none" stroke="none"></path>
+      <text id="pathText" dy="-8">
+        <textPath id="textPathRef" href="#textPath" startOffset="50%" text-anchor="middle">Drag the dot</textPath>
+      </text>
+      <circle id="handle" cx="200" cy="60" r="10"></circle>
+    </svg>
+  </div>
+
+  <div class="control-row">
+    <label for="textInput">Text on the path</label>
+    <input type="text" id="textInput" value="Drag the dot" maxlength="60">
+  </div>
+
+  <label class="checkbox">
+    <input type="checkbox" id="guideCheck" checked>
+    Show the underlying curve
+  </label>
+</main>
+
+<script>
+const svg = document.querySelector('svg');
+const handle = document.getElementById('handle');
+const guidePath = document.getElementById('guidePath');
+const textPath = document.getElementById('textPath');
+const textInput = document.getElementById('textInput');
+const textPathRef = document.getElementById('textPathRef');
+const guideCheck = document.getElementById('guideCheck');
+
+const START = { x: 30, y: 170 };
+const END = { x: 370, y: 170 };
+let dragging = false;
+
+function pathD(cx, cy) {
+  return `M${START.x},${START.y} Q${cx},${cy} ${END.x},${END.y}`;
+}
+
+function svgPoint(e) {
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  const ctm = svg.getScreenCTM().inverse();
+  return pt.matrixTransform(ctm);
+}
+
+function moveHandle(x, y) {
+  const cx = Math.min(370, Math.max(30, x));
+  const cy = Math.min(210, Math.max(10, y));
+  handle.setAttribute('cx', cx);
+  handle.setAttribute('cy', cy);
+  const d = pathD(cx, cy);
+  guidePath.setAttribute('d', d);
+  textPath.setAttribute('d', d);
+}
+
+handle.addEventListener('pointerdown', (e) => {
+  dragging = true;
+  handle.setPointerCapture(e.pointerId);
+});
+svg.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const p = svgPoint(e);
+  moveHandle(p.x, p.y);
+});
+handle.addEventListener('pointerup', () => { dragging = false; });
+handle.addEventListener('pointercancel', () => { dragging = false; });
+
+textInput.addEventListener('input', () => {
+  textPathRef.textContent = textInput.value || ' ';
+});
+
+guideCheck.addEventListener('change', () => {
+  guidePath.style.display = guideCheck.checked ? '' : 'none';
+  handle.style.display = guideCheck.checked ? '' : 'none';
+});
+</script>
+</body>
+</html>
