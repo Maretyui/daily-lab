@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>088 — Swipe Card Stack</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --danger: #f2545b;
+    --like: #2dd4bf;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 6rem 1.25rem 8rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+    margin: 0;
+  }
+
+  .stack {
+    position: relative;
+    width: 100%;
+    height: 340px;
+  }
+
+  .card {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 1.25rem;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+    will-change: transform;
+  }
+  .card:active { cursor: grabbing; }
+
+  .card .emoji {
+    font-size: 3rem;
+    align-self: flex-start;
+    margin-bottom: auto;
+  }
+
+  .card h2 { margin: 0 0 0.25rem; font-size: 1.15rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+  .badge {
+    position: absolute;
+    top: 1.25rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    border: 2px solid;
+    opacity: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .badge.like { right: 1.25rem; color: var(--like); border-color: var(--like); }
+  .badge.nope { left: 1.25rem; color: var(--danger); border-color: var(--danger); }
+
+  .controls {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  button.action {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.6rem 1.1rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  button.action:hover { border-color: var(--accent); color: var(--accent); }
+
+  .empty {
+    color: var(--muted);
+    text-align: center;
+    padding: 2rem 1rem;
+    border: 1px dashed var(--border);
+    border-radius: 16px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>088 — Swipe Card Stack</h1>
+  <p>
+    A Tinder-style card stack built on raw Pointer Events, not the HTML5
+    drag-and-drop API — that API is mouse-first and fights you on touch
+    devices. Drag a card far enough (or fast enough) and it flies off in
+    that direction; let go early and it snaps back to center via a CSS
+    transition.
+  </p>
+
+  <div class="stack" id="stack"></div>
+
+  <div class="controls">
+    <button class="action" id="nopeBtn">✕ Nope</button>
+    <button class="action" id="resetBtn">Reset stack</button>
+    <button class="action" id="likeBtn">♥ Like</button>
+  </div>
+</main>
+
+<script>
+  const stackEl = document.getElementById('stack');
+  const nopeBtn = document.getElementById('nopeBtn');
+  const likeBtn = document.getElementById('likeBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const DECK = [
+    { emoji: '🌵', title: 'Cactus', desc: 'Low maintenance, high commitment.' },
+    { emoji: '🛰️', title: 'Satellite', desc: 'Orbits quietly, never texts first.' },
+    { emoji: '🍜', title: 'Ramen', desc: 'Ready in three minutes flat.' },
+    { emoji: '🦑', title: 'Squid', desc: 'Has three hearts, uses none of them.' },
+    { emoji: '🪁', title: 'Kite', desc: 'Only shows up when it is windy.' },
+    { emoji: '🧊', title: 'Ice Cube', desc: 'Cold, but melts under pressure.' },
+  ];
+
+  let deck = [];
+  const SWIPE_THRESHOLD = 100;
+  const VELOCITY_THRESHOLD = 0.5;
+
+  function render() {
+    stackEl.innerHTML = '';
+    if (deck.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'All out of cards — reset to go again.';
+      stackEl.appendChild(empty);
+      return;
+    }
+
+    deck.slice(0, 3).forEach((item, i) => {
+      const idxFromTop = i;
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.zIndex = String(10 - idxFromTop);
+      card.style.transform = `scale(${1 - idxFromTop * 0.04}) translateY(${idxFromTop * 10}px)`;
+      card.innerHTML = `
+        <div class="badge like">Like</div>
+        <div class="badge nope">Nope</div>
+        <div class="emoji" aria-hidden="true">${item.emoji}</div>
+        <h2>${item.title}</h2>
+        <p>${item.desc}</p>
+      `;
+      if (idxFromTop === 0) {
+        attachDrag(card);
+      }
+      stackEl.appendChild(card);
+    });
+  }
+
+  function attachDrag(card) {
+    let startX = 0, startY = 0, dx = 0, dy = 0;
+    let dragging = false;
+    let lastMoveTime = 0, lastDx = 0, velocity = 0;
+    const likeBadge = card.querySelector('.badge.like');
+    const nopeBadge = card.querySelector('.badge.nope');
+
+    function onPointerDown(e) {
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      lastMoveTime = performance.now();
+      lastDx = 0;
+      card.setPointerCapture(e.pointerId);
+      card.style.transition = 'none';
+    }
+
+    function onPointerMove(e) {
+      if (!dragging) return;
+      dx = e.clientX - startX;
+      dy = e.clientY - startY;
+      const now = performance.now();
+      const dt = now - lastMoveTime || 16;
+      velocity = (dx - lastDx) / dt;
+      lastDx = dx;
+      lastMoveTime = now;
+
+      const rotate = dx * 0.06;
+      card.style.transform = `translate(${dx}px, ${dy}px) rotate(${rotate}deg)`;
+      const strength = Math.min(1, Math.abs(dx) / SWIPE_THRESHOLD);
+      if (dx > 0) {
+        likeBadge.style.opacity = String(strength);
+        nopeBadge.style.opacity = '0';
+      } else {
+        nopeBadge.style.opacity = String(strength);
+        likeBadge.style.opacity = '0';
+      }
+    }
+
+    function onPointerUp() {
+      if (!dragging) return;
+      dragging = false;
+      card.style.transition = 'transform 0.35s ease, opacity 0.35s ease';
+
+      const willFly = Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(velocity) > VELOCITY_THRESHOLD;
+      if (willFly) {
+        const direction = dx >= 0 ? 1 : -1;
+        card.style.transform = `translate(${direction * 600}px, ${dy}px) rotate(${direction * 30}deg)`;
+        card.style.opacity = '0';
+        deck.shift();
+        setTimeout(render, 300);
+      } else {
+        card.style.transform = 'translate(0, 0) rotate(0deg)';
+        likeBadge.style.opacity = '0';
+        nopeBadge.style.opacity = '0';
+      }
+    }
+
+    card.addEventListener('pointerdown', onPointerDown);
+    card.addEventListener('pointermove', onPointerMove);
+    card.addEventListener('pointerup', onPointerUp);
+    card.addEventListener('pointercancel', onPointerUp);
+  }
+
+  function decide(direction) {
+    const card = stackEl.querySelector('.card');
+    if (!card) return;
+    card.style.transition = 'transform 0.35s ease, opacity 0.35s ease';
+    card.style.transform = `translate(${direction * 600}px, -20px) rotate(${direction * 30}deg)`;
+    card.style.opacity = '0';
+    deck.shift();
+    setTimeout(render, 300);
+  }
+
+  nopeBtn.addEventListener('click', () => decide(-1));
+  likeBtn.addEventListener('click', () => decide(1));
+  resetBtn.addEventListener('click', () => {
+    deck = [...DECK];
+    render();
+  });
+
+  deck = [...DECK];
+  render();
+</script>
+</body>
+</html>
