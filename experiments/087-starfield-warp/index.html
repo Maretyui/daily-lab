@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>087 — Starfield Warp</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 6rem 1.25rem 8rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { margin: 0; font-size: 1.5rem; }
+
+  main > p {
+    color: var(--muted);
+    line-height: 1.7;
+    margin: 0;
+  }
+
+  .stage-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 5 / 4;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: #000;
+    touch-action: none;
+  }
+
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .status-row span { font-variant-numeric: tabular-nums; }
+
+  button.action {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  button.action:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>087 — Starfield Warp</h1>
+  <p>
+    A field of stars streams past a fixed vanishing point, each one moving
+    outward at a speed proportional to its own distance from center so
+    closer stars appear to fly by faster — the classic parallax trick behind
+    every warp-speed effect. Drag (or press) anywhere in the stage to push
+    the throttle; release to drift back down to cruising speed.
+  </p>
+
+  <div class="stage-wrap" id="stageWrap">
+    <canvas id="stars" role="img" aria-label="Animated starfield warp effect, speeds up while pressed"></canvas>
+  </div>
+
+  <div class="status-row">
+    <span id="speedOut">Speed: 1.0×</span>
+    <button class="action" id="resetBtn">Reset</button>
+  </div>
+</main>
+
+<script>
+  const wrap = document.getElementById('stageWrap');
+  const canvas = document.getElementById('stars');
+  const ctx = canvas.getContext('2d');
+  const speedOut = document.getElementById('speedOut');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const STAR_COUNT = 420;
+  let stars = [];
+  let cx = 0, cy = 0;
+  let dpr = window.devicePixelRatio || 1;
+  let boost = 0; // 0..1, ramps up while pressed
+  let pressed = false;
+  let rafId = null;
+
+  function makeStar(fresh) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = fresh ? Math.random() * 20 : Math.random() * Math.max(cx, cy);
+    return {
+      angle,
+      radius,
+      z: 0.2 + Math.random() * 0.8, // depth factor, affects size/brightness
+    };
+  }
+
+  function sizeCanvas() {
+    const rect = wrap.getBoundingClientRect();
+    dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx = rect.width / 2;
+    cy = rect.height / 2;
+  }
+
+  function reset() {
+    sizeCanvas();
+    stars = Array.from({ length: STAR_COUNT }, () => makeStar(false));
+    boost = 0;
+    speedOut.textContent = 'Speed: 1.0×';
+  }
+
+  function step() {
+    const rect = wrap.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    const maxRadius = Math.hypot(cx, cy);
+
+    boost = Math.max(0, Math.min(1, pressed ? boost + 0.06 : boost - 0.04));
+    const speedMul = 1 + boost * 9;
+    speedOut.textContent = `Speed: ${speedMul.toFixed(1)}×`;
+
+    ctx.fillStyle = boost > 0.05 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, w, h);
+
+    for (const star of stars) {
+      const baseSpeed = 0.6 + star.z * 1.4;
+      star.radius += baseSpeed * speedMul;
+
+      if (star.radius > maxRadius) {
+        Object.assign(star, makeStar(true));
+        continue;
+      }
+
+      const x = cx + Math.cos(star.angle) * star.radius;
+      const y = cy + Math.sin(star.angle) * star.radius;
+      const depthFactor = star.radius / maxRadius;
+      const size = 0.5 + depthFactor * 2.2 * star.z;
+      const streak = speedMul > 1.3 ? Math.min(28, baseSpeed * speedMul * 0.6) : 0;
+
+      if (streak > 1) {
+        const tailX = x - Math.cos(star.angle) * streak;
+        const tailY = y - Math.sin(star.angle) * streak;
+        const grad = ctx.createLinearGradient(tailX, tailY, x, y);
+        grad.addColorStop(0, 'rgba(255,255,255,0)');
+        grad.addColorStop(1, `rgba(255,255,255,${0.3 + depthFactor * 0.6})`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = size;
+        ctx.beginPath();
+        ctx.moveTo(tailX, tailY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = `rgba(255,255,255,${0.3 + depthFactor * 0.6})`;
+        ctx.beginPath();
+        ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    rafId = requestAnimationFrame(step);
+  }
+
+  wrap.addEventListener('pointerdown', (e) => {
+    pressed = true;
+    wrap.setPointerCapture(e.pointerId);
+  });
+  wrap.addEventListener('pointerup', () => { pressed = false; });
+  wrap.addEventListener('pointercancel', () => { pressed = false; });
+
+  resetBtn.addEventListener('click', reset);
+  window.addEventListener('resize', () => {
+    sizeCanvas();
+  });
+
+  reset();
+  rafId = requestAnimationFrame(step);
+</script>
+</body>
+</html>
