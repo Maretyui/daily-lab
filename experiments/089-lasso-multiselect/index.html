@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>089 — Lasso Multi-Select</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .toolbar button {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--accent); }
+
+  .field {
+    position: relative;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    background: #0e1219;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .tile {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+  }
+
+  .tile.selected {
+    background: color-mix(in srgb, var(--accent) 30%, var(--card));
+    border-color: var(--accent);
+    color: var(--text);
+    transform: scale(0.94);
+  }
+
+  .lasso {
+    position: absolute;
+    border: 1.5px dashed var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+  }
+
+  footer {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>089 — Lasso Multi-Select</h1>
+  <p class="intro">
+    Drag anywhere on the empty grid background to draw a rubber-band
+    selection box — every tile it overlaps gets selected live as you drag.
+    Tap a single tile to toggle it on its own. Works identically with a
+    mouse or a finger, all driven by Pointer Events.
+  </p>
+
+  <div class="toolbar">
+    <span id="count">0 selected</span>
+    <button id="clear" type="button">Clear</button>
+  </div>
+
+  <div class="field" id="field">
+    <div class="grid" id="grid"></div>
+    <div class="lasso" id="lasso"></div>
+  </div>
+
+  <footer>
+    Selection state lives in a <code>Set</code> of tile indices; the lasso
+    rectangle is recomputed on every <code>pointermove</code> by comparing
+    its bounds against each tile's <code>getBoundingClientRect()</code>.
+  </footer>
+</main>
+
+<script>
+  const grid = document.getElementById('grid');
+  const field = document.getElementById('field');
+  const lasso = document.getElementById('lasso');
+  const countLabel = document.getElementById('count');
+  const clearBtn = document.getElementById('clear');
+
+  const TILE_COUNT = 36;
+  const selected = new Set();
+  const tiles = [];
+
+  for (let i = 0; i < TILE_COUNT; i++) {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.textContent = i + 1;
+    tile.dataset.index = i;
+    grid.appendChild(tile);
+    tiles.push(tile);
+  }
+
+  function updateCount() {
+    countLabel.textContent = `${selected.size} selected`;
+  }
+
+  function setTileSelected(i, on) {
+    if (on) selected.add(i);
+    else selected.delete(i);
+    tiles[i].classList.toggle('selected', on);
+  }
+
+  function toggleTile(i) {
+    setTileSelected(i, !selected.has(i));
+    updateCount();
+  }
+
+  function clearAll() {
+    selected.forEach((i) => tiles[i].classList.remove('selected'));
+    selected.clear();
+    updateCount();
+  }
+
+  clearBtn.addEventListener('click', clearAll);
+
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let baseline = new Set();
+
+  function rectsOverlap(a, b) {
+    return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
+  }
+
+  function applyLasso(x0, y0, x1, y1) {
+    const left = Math.min(x0, x1);
+    const right = Math.max(x0, x1);
+    const top = Math.min(y0, y1);
+    const bottom = Math.max(y0, y1);
+
+    lasso.style.left = `${left}px`;
+    lasso.style.top = `${top}px`;
+    lasso.style.width = `${right - left}px`;
+    lasso.style.height = `${bottom - top}px`;
+
+    const fieldRect = field.getBoundingClientRect();
+    const lassoBox = {
+      left: fieldRect.left + left,
+      right: fieldRect.left + right,
+      top: fieldRect.top + top,
+      bottom: fieldRect.top + bottom,
+    };
+
+    tiles.forEach((tile, i) => {
+      const r = tile.getBoundingClientRect();
+      const inLasso = rectsOverlap(lassoBox, r);
+      const shouldSelect = baseline.has(i) !== inLasso;
+      setTileSelected(i, shouldSelect ? !baseline.has(i) : baseline.has(i));
+    });
+    updateCount();
+  }
+
+  field.addEventListener('pointerdown', (e) => {
+    const tileHit = e.target.closest('.tile');
+    if (tileHit) {
+      toggleTile(Number(tileHit.dataset.index));
+      return;
+    }
+    dragging = true;
+    baseline = new Set(selected);
+    const fieldRect = field.getBoundingClientRect();
+    startX = e.clientX - fieldRect.left;
+    startY = e.clientY - fieldRect.top;
+    lasso.style.display = 'block';
+    applyLasso(startX, startY, startX, startY);
+    field.setPointerCapture(e.pointerId);
+  });
+
+  field.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const fieldRect = field.getBoundingClientRect();
+    const x = e.clientX - fieldRect.left;
+    const y = e.clientY - fieldRect.top;
+    applyLasso(startX, startY, x, y);
+  });
+
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    lasso.style.display = 'none';
+    try { field.releasePointerCapture(e.pointerId); } catch (err) {}
+  }
+
+  field.addEventListener('pointerup', endDrag);
+  field.addEventListener('pointercancel', endDrag);
+</script>
+</body>
+</html>
