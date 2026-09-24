@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>092 — Gyro Holo Card</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    align-content: center;
+    gap: 1.5rem;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  .stage {
+    perspective: 900px;
+    width: 100%;
+    max-width: 300px;
+    display: grid;
+    justify-items: center;
+  }
+
+  .card {
+    position: relative;
+    width: 100%;
+    max-width: 280px;
+    aspect-ratio: 5 / 7;
+    border-radius: 18px;
+    background: linear-gradient(155deg, #1c2230, #0f131c);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transform-style: preserve-3d;
+    transition: transform 0.15s ease-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    touch-action: none;
+    box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.6);
+  }
+
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      var(--foil-angle, 115deg),
+      transparent 30%,
+      rgba(255, 100, 220, var(--foil-alpha, 0)) 40%,
+      rgba(100, 220, 255, var(--foil-alpha, 0)) 50%,
+      rgba(255, 220, 100, var(--foil-alpha, 0)) 60%,
+      transparent 70%
+    );
+    mix-blend-mode: color-dodge;
+    pointer-events: none;
+  }
+
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.25), transparent 55%);
+    opacity: var(--sheen-alpha, 0);
+    pointer-events: none;
+  }
+
+  .card span {
+    font-size: 0.85rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-align: center;
+    padding: 0 1.5rem;
+  }
+
+  .controls {
+    display: grid;
+    justify-items: center;
+    gap: 0.5rem;
+    text-align: center;
+  }
+
+  button#permBtn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button#permBtn:hover { border-color: var(--accent); }
+  button#permBtn[hidden] { display: none; }
+
+  p.caption {
+    max-width: 320px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  p.status {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+  <a class="back" href="../../index.html">&larr; daily-lab</a>
+
+  <div class="stage">
+    <div class="card" id="card">
+      <span>tilt your phone</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="permBtn" type="button" hidden>Enable motion tilt</button>
+    <p class="status" id="status">Move your phone to tilt the card. On desktop, drag with the mouse instead.</p>
+  </div>
+
+  <p class="caption">
+    Reads <code>deviceorientation</code> beta/gamma to drive the 3D
+    rotation and a holographic foil sheen, the way a phone's gyroscope
+    tilts a trading-card app — falls back to pointer dragging when no
+    motion sensor is available.
+  </p>
+
+  <script>
+    const card = document.getElementById('card');
+    const permBtn = document.getElementById('permBtn');
+    const status = document.getElementById('status');
+    const MAX_TILT = 16;
+
+    function applyTilt(nx, ny) {
+      // nx, ny are normalized -1..1
+      const rotateY = nx * MAX_TILT;
+      const rotateX = -ny * MAX_TILT;
+      card.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.02)`;
+      card.style.setProperty('--foil-angle', `${115 + nx * 40}deg`);
+      card.style.setProperty('--foil-alpha', `${0.25 + Math.abs(nx + ny) * 0.15}`);
+      card.style.setProperty('--mx', `${(nx * 0.5 + 0.5) * 100}%`);
+      card.style.setProperty('--my', `${(ny * 0.5 + 0.5) * 100}%`);
+      card.style.setProperty('--sheen-alpha', '1');
+    }
+
+    function resetTilt() {
+      card.style.transform = 'rotateX(0) rotateY(0) scale(1)';
+      card.style.setProperty('--sheen-alpha', '0');
+      card.style.setProperty('--foil-alpha', '0');
+    }
+
+    let motionActive = false;
+
+    function handleOrientation(e) {
+      if (e.beta === null || e.gamma === null) return;
+      motionActive = true;
+      const nx = Math.max(-1, Math.min(1, e.gamma / 45));
+      const ny = Math.max(-1, Math.min(1, (e.beta - 45) / 45));
+      applyTilt(nx, ny);
+    }
+
+    function startMotion() {
+      window.addEventListener('deviceorientation', handleOrientation);
+      status.textContent = 'Tilting with your phone’s motion sensor.';
+    }
+
+    const needsPermission =
+      typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function';
+
+    if (needsPermission) {
+      permBtn.hidden = false;
+      status.textContent = 'Tap the button to allow motion access.';
+      permBtn.addEventListener('click', async () => {
+        try {
+          const result = await DeviceOrientationEvent.requestPermission();
+          if (result === 'granted') {
+            permBtn.hidden = true;
+            startMotion();
+          } else {
+            status.textContent = 'Motion access denied — drag the card instead.';
+          }
+        } catch (err) {
+          status.textContent = 'Motion access unavailable — drag the card instead.';
+        }
+      });
+    } else if ('DeviceOrientationEvent' in window) {
+      startMotion();
+      // Some desktop browsers expose the event but never fire it; if
+      // nothing arrives shortly, silently stay on the pointer fallback.
+      setTimeout(() => {
+        if (!motionActive) {
+          status.textContent = 'No motion sensor detected — drag the card with a mouse or finger.';
+        }
+      }, 1500);
+    } else {
+      status.textContent = 'No motion sensor available — drag the card with a mouse or finger.';
+    }
+
+    // Pointer fallback / always-available manual control.
+    let dragging = false;
+
+    card.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      card.setPointerCapture(e.pointerId);
+    });
+
+    card.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const rect = card.getBoundingClientRect();
+      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+      applyTilt(nx, ny);
+    });
+
+    function endDrag(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { card.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (!motionActive) resetTilt();
+    }
+
+    card.addEventListener('pointerup', endDrag);
+    card.addEventListener('pointercancel', endDrag);
+    card.addEventListener('pointerleave', () => {
+      if (!dragging && !motionActive) resetTilt();
+    });
+  </script>
+</body>
+</html>
