@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>091 — Speech Reader</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.25rem;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 7rem;
+    resize: vertical;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 0.75rem;
+  }
+  textarea:focus-visible { outline: 2px solid var(--accent); }
+
+  .field {
+    margin-top: 0.9rem;
+  }
+
+  .field label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+  }
+
+  select,
+  input[type="range"] {
+    width: 100%;
+  }
+
+  select {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.5rem;
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 1.1rem;
+  }
+
+  .controls button {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--accent); }
+  .controls button:disabled { opacity: 0.4; cursor: default; }
+  .controls button:disabled:hover { border-color: var(--border); }
+
+  .output {
+    margin-top: 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    background: var(--card);
+    min-height: 2.4rem;
+  }
+
+  .output .word {
+    padding: 0 0.05rem;
+    border-radius: 4px;
+  }
+
+  .output .word.current {
+    background: var(--accent);
+    color: #06201c;
+  }
+
+  .status {
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  footer {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>091 — Speech Reader</h1>
+  <p class="intro">
+    Type or paste text, pick a voice, and hit play. The browser's built-in
+    speech synthesizer reads it aloud while the word currently being
+    spoken lights up below, tracked via each utterance's boundary events.
+  </p>
+
+  <textarea id="text" spellcheck="false">The quick brown fox jumps over the lazy dog. Every word below highlights itself the moment the synthesizer actually speaks it, not on a fixed timer.</textarea>
+
+  <div class="field">
+    <label for="voice">Voice</label>
+    <select id="voice"></select>
+  </div>
+
+  <div class="field">
+    <label for="rate">Rate <span id="rateValue">1.0×</span></label>
+    <input type="range" id="rate" min="0.5" max="2" step="0.1" value="1">
+  </div>
+
+  <div class="field">
+    <label for="pitch">Pitch <span id="pitchValue">1.0</span></label>
+    <input type="range" id="pitch" min="0" max="2" step="0.1" value="1">
+  </div>
+
+  <div class="controls">
+    <button id="playBtn" type="button">Play</button>
+    <button id="pauseBtn" type="button" disabled>Pause</button>
+    <button id="stopBtn" type="button" disabled>Stop</button>
+  </div>
+
+  <div class="output" id="output" aria-live="off"></div>
+  <p class="status" id="status">Ready.</p>
+
+  <footer>
+    Word timing comes from <code>SpeechSynthesisUtterance</code>'s
+    <code>boundary</code> event, which reports the character offset of
+    each spoken word as it happens — no fixed-interval guessing.
+    Voice list availability and boundary-event support vary by
+    browser/OS.
+  </footer>
+</main>
+
+<script>
+  const textEl = document.getElementById('text');
+  const voiceEl = document.getElementById('voice');
+  const rateEl = document.getElementById('rate');
+  const pitchEl = document.getElementById('pitch');
+  const rateValue = document.getElementById('rateValue');
+  const pitchValue = document.getElementById('pitchValue');
+  const playBtn = document.getElementById('playBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const output = document.getElementById('output');
+  const status = document.getElementById('status');
+
+  const synth = window.speechSynthesis;
+  let voices = [];
+  let wordSpans = [];
+
+  function supported() {
+    return 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  }
+
+  function populateVoices() {
+    voices = synth.getVoices();
+    voiceEl.innerHTML = '';
+    voices.forEach((v, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceEl.appendChild(opt);
+    });
+    const defaultIndex = voices.findIndex((v) => v.default);
+    if (defaultIndex >= 0) voiceEl.value = defaultIndex;
+  }
+
+  function renderWords() {
+    const text = textEl.value;
+    output.innerHTML = '';
+    wordSpans = [];
+    const regex = /\S+/g;
+    let match;
+    let lastEnd = 0;
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastEnd) {
+        output.appendChild(document.createTextNode(text.slice(lastEnd, match.index)));
+      }
+      const span = document.createElement('span');
+      span.className = 'word';
+      span.textContent = match[0];
+      span.dataset.start = match.index;
+      span.dataset.end = match.index + match[0].length;
+      output.appendChild(span);
+      wordSpans.push(span);
+      lastEnd = match.index + match[0].length;
+    }
+    if (lastEnd < text.length) {
+      output.appendChild(document.createTextNode(text.slice(lastEnd)));
+    }
+  }
+
+  function clearHighlight() {
+    wordSpans.forEach((s) => s.classList.remove('current'));
+  }
+
+  function highlightAt(charIndex) {
+    clearHighlight();
+    const span = wordSpans.find(
+      (s) => charIndex >= Number(s.dataset.start) && charIndex < Number(s.dataset.end)
+    );
+    if (span) span.classList.add('current');
+  }
+
+  function setButtons({ playing, paused }) {
+    playBtn.disabled = playing && !paused ? true : false;
+    playBtn.textContent = paused ? 'Resume' : 'Play';
+    pauseBtn.disabled = !playing || paused;
+    stopBtn.disabled = !playing;
+  }
+
+  let utterance = null;
+
+  function speak() {
+    if (!textEl.value.trim()) return;
+    renderWords();
+    utterance = new SpeechSynthesisUtterance(textEl.value);
+    const voice = voices[Number(voiceEl.value)];
+    if (voice) utterance.voice = voice;
+    utterance.rate = Number(rateEl.value);
+    utterance.pitch = Number(pitchEl.value);
+
+    utterance.onboundary = (e) => {
+      if (e.name === 'word' || e.charIndex !== undefined) {
+        highlightAt(e.charIndex);
+      }
+    };
+    utterance.onstart = () => {
+      status.textContent = 'Speaking…';
+      setButtons({ playing: true, paused: false });
+    };
+    utterance.onend = () => {
+      status.textContent = 'Done.';
+      clearHighlight();
+      setButtons({ playing: false, paused: false });
+    };
+    utterance.onerror = () => {
+      status.textContent = 'Playback error.';
+      clearHighlight();
+      setButtons({ playing: false, paused: false });
+    };
+
+    synth.cancel();
+    synth.speak(utterance);
+  }
+
+  playBtn.addEventListener('click', () => {
+    if (synth.paused) {
+      synth.resume();
+      status.textContent = 'Speaking…';
+      setButtons({ playing: true, paused: false });
+      return;
+    }
+    speak();
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    synth.pause();
+    status.textContent = 'Paused.';
+    setButtons({ playing: true, paused: true });
+  });
+
+  stopBtn.addEventListener('click', () => {
+    synth.cancel();
+    status.textContent = 'Stopped.';
+    clearHighlight();
+    setButtons({ playing: false, paused: false });
+  });
+
+  rateEl.addEventListener('input', () => {
+    rateValue.textContent = `${Number(rateEl.value).toFixed(1)}×`;
+  });
+
+  pitchEl.addEventListener('input', () => {
+    pitchValue.textContent = Number(pitchEl.value).toFixed(1);
+  });
+
+  if (supported()) {
+    populateVoices();
+    if (synth.onvoiceschanged !== undefined) {
+      synth.addEventListener('voiceschanged', populateVoices);
+    }
+    renderWords();
+    textEl.addEventListener('input', () => {
+      synth.cancel();
+      clearHighlight();
+      setButtons({ playing: false, paused: false });
+      status.textContent = 'Ready.';
+      renderWords();
+    });
+  } else {
+    status.textContent = 'Speech synthesis is not supported in this browser.';
+    playBtn.disabled = true;
+    pauseBtn.disabled = true;
+    stopBtn.disabled = true;
+  }
+</script>
+</body>
+</html>
