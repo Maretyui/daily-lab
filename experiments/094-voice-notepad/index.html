@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>094 — Voice Notepad</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+  }
+
+  #micBtn {
+    flex: 0 0 auto;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 1.4rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #micBtn:hover { border-color: var(--accent); }
+  #micBtn.listening {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #2a0808;
+  }
+  #micBtn:disabled { opacity: 0.4; cursor: default; }
+
+  .status {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .status .label {
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+
+  .status .interim {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-style: italic;
+    min-height: 1.1rem;
+    overflow-wrap: break-word;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 12rem;
+    resize: vertical;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    padding: 0.85rem;
+  }
+  textarea:focus-visible { outline: 2px solid var(--accent); }
+
+  .actions {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+  }
+
+  .actions button {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .actions button:hover { border-color: var(--accent); }
+
+  footer {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>094 — Voice Notepad</h1>
+  <p class="intro">
+    Tap the mic and start talking — the browser's speech recognizer
+    transcribes it live into the notepad below. The transcript stays
+    editable at any time, dictated or not.
+  </p>
+
+  <div class="controls">
+    <button id="micBtn" type="button" aria-pressed="false">🎤</button>
+    <div class="status">
+      <div class="label" id="statusLabel">Tap the mic to start dictating.</div>
+      <div class="interim" id="interim"></div>
+    </div>
+  </div>
+
+  <textarea id="transcript" placeholder="Dictated text appears here — you can also type or edit directly."></textarea>
+
+  <div class="actions">
+    <button id="clearBtn" type="button">Clear</button>
+    <button id="copyBtn" type="button">Copy</button>
+  </div>
+
+  <footer>
+    Uses the <code>SpeechRecognition</code> API in continuous +
+    interim-results mode. Finalized phrases get appended to the
+    textarea; the still-being-recognized phrase shows separately above
+    it until it's finalized or corrected. Browser support is
+    inconsistent — this works in Chrome/Edge and most Chromium-based
+    mobile browsers, but not in Firefox or desktop Safari.
+  </footer>
+</main>
+
+<script>
+  const micBtn = document.getElementById('micBtn');
+  const statusLabel = document.getElementById('statusLabel');
+  const interimEl = document.getElementById('interim');
+  const transcript = document.getElementById('transcript');
+  const clearBtn = document.getElementById('clearBtn');
+  const copyBtn = document.getElementById('copyBtn');
+
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognitionImpl) {
+    statusLabel.textContent = 'Speech recognition is not supported in this browser.';
+    micBtn.disabled = true;
+  } else {
+    const recognition = new SpeechRecognitionImpl();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    let listening = false;
+    // Chrome auto-stops recognition after a stretch of silence even in
+    // continuous mode; this flag distinguishes that from the user
+    // pressing the mic button, so only the former triggers a restart.
+    let userStopped = false;
+
+    recognition.addEventListener('result', (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          const text = result[0].transcript.trim();
+          if (text) {
+            transcript.value = transcript.value
+              ? `${transcript.value.replace(/\s+$/, '')} ${text}`
+              : text;
+          }
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      interimEl.textContent = interim;
+    });
+
+    recognition.addEventListener('error', (event) => {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        statusLabel.textContent = 'Microphone access was denied.';
+        userStopped = true;
+      }
+    });
+
+    recognition.addEventListener('end', () => {
+      interimEl.textContent = '';
+      if (listening && !userStopped) {
+        recognition.start();
+        return;
+      }
+      listening = false;
+      micBtn.classList.remove('listening');
+      micBtn.setAttribute('aria-pressed', 'false');
+      micBtn.textContent = '🎤';
+      statusLabel.textContent = 'Tap the mic to start dictating.';
+    });
+
+    micBtn.addEventListener('click', () => {
+      if (listening) {
+        userStopped = true;
+        recognition.stop();
+        return;
+      }
+      userStopped = false;
+      listening = true;
+      micBtn.classList.add('listening');
+      micBtn.setAttribute('aria-pressed', 'true');
+      micBtn.textContent = '⏹';
+      statusLabel.textContent = 'Listening…';
+      recognition.start();
+    });
+  }
+
+  clearBtn.addEventListener('click', () => {
+    transcript.value = '';
+    transcript.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(transcript.value);
+      copyBtn.textContent = 'Copied!';
+      setTimeout(() => (copyBtn.textContent = 'Copy'), 1200);
+    } catch {
+      // Clipboard write can be denied - the text stays selectable either way.
+    }
+  });
+</script>
+</body>
+</html>
