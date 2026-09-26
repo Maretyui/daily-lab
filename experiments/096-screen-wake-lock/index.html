@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>096 — Screen Wake Lock</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1.5rem 0;
+  }
+
+  .dot {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 999px;
+    border: 2px solid var(--border);
+    background: var(--card);
+    transition: border-color 200ms ease, background 200ms ease, box-shadow 200ms ease;
+  }
+  .dot.active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 20%, var(--card));
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  .status {
+    font-size: 0.95rem;
+    text-align: center;
+  }
+
+  .timer {
+    font-variant-numeric: tabular-nums;
+    font-size: 1.6rem;
+    color: var(--muted);
+  }
+
+  #toggleBtn {
+    width: 100%;
+    max-width: 280px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  #toggleBtn:hover { border-color: var(--accent); }
+  #toggleBtn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #06211d;
+  }
+  #toggleBtn:disabled { opacity: 0.4; cursor: default; }
+
+  footer {
+    margin-top: 1.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>096 — Screen Wake Lock</h1>
+  <p class="intro">
+    Toggle the lock and leave your phone alone — the screen stays on
+    (and the dial keeps pulsing) instead of dimming and locking on its
+    usual timeout.
+  </p>
+
+  <div class="stage">
+    <div class="dot" id="dot"></div>
+    <div class="status" id="status">Wake lock is off.</div>
+    <div class="timer" id="timer"></div>
+    <button id="toggleBtn" type="button">Keep screen awake</button>
+  </div>
+
+  <footer id="footerNote">
+    Uses the <code>Screen Wake Lock API</code>
+    (<code>navigator.wakeLock.request('screen')</code>). The lock is
+    automatically released by the browser whenever the tab is hidden
+    (switching apps, locking the phone manually, minimizing) — this
+    page listens for that and re-requests it once the tab becomes
+    visible again, which is the documented way to handle it rather
+    than a one-time request.
+  </footer>
+</main>
+
+<script>
+  const dot = document.getElementById('dot');
+  const statusEl = document.getElementById('status');
+  const timerEl = document.getElementById('timer');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const footerNote = document.getElementById('footerNote');
+
+  let wakeLock = null;
+  let wanted = false;
+  let startTime = 0;
+  let intervalId = null;
+
+  if (!('wakeLock' in navigator)) {
+    statusEl.textContent = 'The Screen Wake Lock API is not supported in this browser.';
+    toggleBtn.disabled = true;
+    footerNote.textContent =
+      'navigator.wakeLock is unavailable here — support is solid in Chrome/Edge/Android WebView but missing in Firefox and (as of recent versions) desktop Safari.';
+  }
+
+  function formatElapsed(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    return `${minutes}:${seconds}`;
+  }
+
+  function setActive(active) {
+    dot.classList.toggle('active', active);
+    toggleBtn.classList.toggle('active', active);
+    toggleBtn.textContent = active ? 'Release wake lock' : 'Keep screen awake';
+    statusEl.textContent = active ? 'Wake lock is on — screen stays awake.' : 'Wake lock is off.';
+
+    clearInterval(intervalId);
+    if (active) {
+      startTime = performance.now();
+      timerEl.textContent = formatElapsed(0);
+      intervalId = setInterval(() => {
+        timerEl.textContent = formatElapsed(performance.now() - startTime);
+      }, 1000);
+    } else {
+      timerEl.textContent = '';
+    }
+  }
+
+  async function acquire() {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        // Fires both when we release it ourselves and when the browser
+        // force-releases it on visibility change - setActive(false) here
+        // is only wrong for the latter, and visibilitychange re-acquires
+        // it right after, so the flicker is a single interval tick.
+        setActive(false);
+      });
+      setActive(true);
+    } catch (err) {
+      statusEl.textContent = `Could not acquire wake lock: ${err.message}`;
+    }
+  }
+
+  toggleBtn.addEventListener('click', async () => {
+    if (wakeLock) {
+      wanted = false;
+      await wakeLock.release();
+      wakeLock = null;
+    } else {
+      wanted = true;
+      await acquire();
+    }
+  });
+
+  document.addEventListener('visibilitychange', async () => {
+    if (wanted && !wakeLock && document.visibilityState === 'visible') {
+      await acquire();
+    }
+  });
+</script>
+</body>
+</html>
