@@ -500,6 +500,12 @@
         <small>Tap in time with a vibration pulse from the Vibration API; timing is scored against the beat schedule via performance.now(), with a visual-only fallback where vibrate() isn't supported</small>
       </a>
     </li>
+    <li>
+      <a href="experiments/096-screen-wake-lock/">
+        096 — Screen Wake Lock
+        <small>Toggle navigator.wakeLock.request('screen') to keep the display from dimming, re-acquiring it on the visibilitychange event since the browser force-releases it whenever the tab is hidden</small>
+      </a>
+    </li>
   </ul>
 </main>
 </body>
