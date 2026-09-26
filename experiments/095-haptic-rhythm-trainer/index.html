@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>095 — Haptic Rhythm Trainer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --good: #22c55e;
+    --ok: #eab308;
+    --miss: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .bpm-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .bpm-row label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+
+  .bpm-row input[type="range"] {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .bpm-row .value {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+    width: 4.5rem;
+    text-align: right;
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem 0;
+  }
+
+  #tapBtn {
+    width: 100%;
+    max-width: 220px;
+    aspect-ratio: 1;
+    border-radius: 999px;
+    border: 2px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: transform 80ms ease, border-color 80ms ease, background 80ms ease;
+  }
+  #tapBtn.beat {
+    transform: scale(1.08);
+    border-color: var(--accent);
+  }
+  #tapBtn.feedback-perfect { background: var(--good); border-color: var(--good); color: #06210f; }
+  #tapBtn.feedback-good { background: var(--ok); border-color: var(--ok); color: #241c04; }
+  #tapBtn.feedback-miss { background: var(--miss); border-color: var(--miss); color: #260707; }
+
+  .readout {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .readout div {
+    text-align: center;
+  }
+
+  .readout .num {
+    font-size: 1.3rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .readout .lbl {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+  }
+
+  .actions button {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .actions button:hover { border-color: var(--accent); }
+
+  footer {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>095 — Haptic Rhythm Trainer</h1>
+  <p class="intro">
+    The device buzzes a steady beat through the Vibration API. Tap the
+    circle in time with each pulse — the closer your tap lands to the
+    actual beat, the better your score.
+  </p>
+
+  <div class="bpm-row">
+    <label for="bpmSlider">BPM</label>
+    <input type="range" id="bpmSlider" min="60" max="180" step="2" value="100">
+    <span class="value" id="bpmValue">100</span>
+  </div>
+
+  <div class="stage">
+    <button id="tapBtn" type="button">Tap on the beat</button>
+
+    <div class="readout">
+      <div>
+        <div class="num" id="streakNum">0</div>
+        <div class="lbl">Streak</div>
+      </div>
+      <div>
+        <div class="num" id="avgNum">–</div>
+        <div class="lbl">Avg offset (ms)</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="startBtn" type="button">Start</button>
+      <button id="resetBtn" type="button">Reset</button>
+    </div>
+  </div>
+
+  <footer id="footerNote">
+    Uses <code>navigator.vibrate()</code> to pulse a short buzz on every
+    beat, alongside a visual pulse for devices or browsers that don't
+    support it. Tap timing is measured against the beat schedule with
+    <code>performance.now()</code>, not against the vibration or
+    animation firing, so results stay accurate regardless of rendering
+    delays.
+  </footer>
+</main>
+
+<script>
+  const bpmSlider = document.getElementById('bpmSlider');
+  const bpmValue = document.getElementById('bpmValue');
+  const tapBtn = document.getElementById('tapBtn');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const streakNum = document.getElementById('streakNum');
+  const avgNum = document.getElementById('avgNum');
+  const footerNote = document.getElementById('footerNote');
+
+  const PERFECT_MS = 60;
+  const GOOD_MS = 150;
+
+  let interval = 60000 / Number(bpmSlider.value);
+  let running = false;
+  let timerId = null;
+  let lastBeatTime = 0;
+  let streak = 0;
+  let offsets = [];
+
+  if (!('vibrate' in navigator)) {
+    footerNote.textContent =
+      "This browser doesn't support navigator.vibrate() (notably iOS Safari and desktop browsers), " +
+      'so only the visual pulse on the button marks each beat — timing still works the same way.';
+  }
+
+  bpmSlider.addEventListener('input', () => {
+    bpmValue.textContent = bpmSlider.value;
+    interval = 60000 / Number(bpmSlider.value);
+    if (running) {
+      clearTimeout(timerId);
+      scheduleBeat();
+    }
+  });
+
+  function beatFire() {
+    lastBeatTime = performance.now();
+    if (navigator.vibrate) navigator.vibrate(30);
+    tapBtn.classList.add('beat');
+    setTimeout(() => tapBtn.classList.remove('beat'), 100);
+  }
+
+  function scheduleBeat() {
+    beatFire();
+    timerId = setTimeout(scheduleBeat, interval);
+  }
+
+  function setFeedback(cls) {
+    tapBtn.classList.remove('feedback-perfect', 'feedback-good', 'feedback-miss');
+    tapBtn.classList.add(cls);
+    setTimeout(() => tapBtn.classList.remove(cls), 180);
+  }
+
+  function updateReadout() {
+    streakNum.textContent = String(streak);
+    if (offsets.length) {
+      const avg = offsets.reduce((a, b) => a + b, 0) / offsets.length;
+      avgNum.textContent = avg.toFixed(0);
+    } else {
+      avgNum.textContent = '–';
+    }
+  }
+
+  tapBtn.addEventListener('pointerdown', () => {
+    if (!running) return;
+    const since = performance.now() - lastBeatTime;
+    const distance = Math.min(since, interval - since);
+
+    if (distance <= PERFECT_MS) {
+      setFeedback('feedback-perfect');
+      streak += 1;
+    } else if (distance <= GOOD_MS) {
+      setFeedback('feedback-good');
+      streak += 1;
+    } else {
+      setFeedback('feedback-miss');
+      streak = 0;
+    }
+
+    offsets.push(distance);
+    if (offsets.length > 20) offsets.shift();
+    updateReadout();
+  });
+
+  startBtn.addEventListener('click', () => {
+    if (running) {
+      running = false;
+      clearTimeout(timerId);
+      startBtn.textContent = 'Start';
+      tapBtn.textContent = 'Tap on the beat';
+    } else {
+      running = true;
+      startBtn.textContent = 'Stop';
+      tapBtn.textContent = 'Tap!';
+      scheduleBeat();
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    streak = 0;
+    offsets = [];
+    updateReadout();
+  });
+</script>
+</body>
+</html>
