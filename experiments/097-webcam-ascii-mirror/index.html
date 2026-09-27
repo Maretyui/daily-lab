@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>097 — Webcam ASCII Mirror</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #22d3ee;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+  }
+
+  video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+  }
+
+  canvas#ascii {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    display: block;
+  }
+
+  .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .row label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+
+  .row input[type="range"] {
+    flex: 1 1 auto;
+    width: 100%;
+    touch-action: manipulation;
+  }
+
+  button {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+    width: 100%;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>097 — Webcam ASCII Mirror</h1>
+  <p class="intro">
+    Turns your live camera feed into a grid of characters, redrawn every
+    frame from the actual pixel brightness — a mirror made of text
+    instead of a picture.
+  </p>
+
+  <div class="stage" id="stage">
+    <video id="video" playsinline muted></video>
+    <canvas id="ascii"></canvas>
+    <div class="placeholder" id="placeholder">Tap "Start camera" to begin.</div>
+  </div>
+
+  <div class="controls">
+    <div class="row">
+      <label for="density">Detail</label>
+      <input type="range" id="density" min="6" max="16" value="10" step="1">
+    </div>
+    <button id="startBtn" type="button">Start camera</button>
+  </div>
+
+  <footer>
+    Uses <code>navigator.mediaDevices.getUserMedia()</code> to read the
+    camera into a hidden <code>&lt;video&gt;</code> element, samples a
+    downscaled frame with <code>drawImage</code> +
+    <code>getImageData</code> on a small offscreen canvas, and maps each
+    sampled pixel's brightness to a character from a fixed ramp before
+    painting it back with <code>fillText</code>. Nothing leaves the
+    device — the video stream is never uploaded or recorded.
+  </footer>
+</main>
+
+<script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('ascii');
+  const ctx = canvas.getContext('2d');
+  const placeholder = document.getElementById('placeholder');
+  const startBtn = document.getElementById('startBtn');
+  const densityInput = document.getElementById('density');
+  const stage = document.getElementById('stage');
+
+  const RAMP = ' .:-=+*#%@';
+  const sampleCanvas = document.createElement('canvas');
+  const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+
+  let rafId = null;
+  let running = false;
+
+  function resizeCanvas() {
+    const rect = stage.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+  }
+
+  function drawFrame() {
+    if (!running) return;
+    const cols = Number(densityInput.value) * 4;
+    const aspect = video.videoHeight && video.videoWidth ? video.videoHeight / video.videoWidth : 0.75;
+    const rows = Math.max(1, Math.round(cols * aspect * 0.55)); // 0.55 corrects for glyphs being taller than wide
+
+    sampleCanvas.width = cols;
+    sampleCanvas.height = rows;
+    sampleCtx.drawImage(video, 0, 0, cols, rows);
+
+    let pixels;
+    try {
+      pixels = sampleCtx.getImageData(0, 0, cols, rows).data;
+    } catch (err) {
+      rafId = requestAnimationFrame(drawFrame);
+      return;
+    }
+
+    const cellW = canvas.width / cols;
+    const cellH = canvas.height / rows;
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = `${Math.max(cellH * 0.95, 1)}px monospace`;
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#22d3ee';
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const i = (y * cols + x) * 4;
+        const brightness = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / (3 * 255);
+        const char = RAMP[Math.min(RAMP.length - 1, Math.floor(brightness * RAMP.length))];
+        if (char !== ' ') {
+          ctx.fillText(char, x * cellW, y * cellH);
+        }
+      }
+    }
+
+    rafId = requestAnimationFrame(drawFrame);
+  }
+
+  async function start() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      placeholder.textContent = 'Camera access (getUserMedia) is not available in this browser.';
+      startBtn.disabled = true;
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      video.srcObject = stream;
+      await video.play();
+      placeholder.style.display = 'none';
+      resizeCanvas();
+      running = true;
+      startBtn.textContent = 'Stop camera';
+      drawFrame();
+    } catch (err) {
+      placeholder.textContent = `Could not access the camera: ${err.message}`;
+    }
+  }
+
+  function stop() {
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    const stream = video.srcObject;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    video.srcObject = null;
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'Tap "Start camera" to begin.';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    startBtn.textContent = 'Start camera';
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (running) {
+      stop();
+    } else {
+      start();
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (running) resizeCanvas();
+  });
+</script>
+</body>
+</html>
