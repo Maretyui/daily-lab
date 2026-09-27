@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>098 — Reaction Time Ledger</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #a78bfa;
+    --go: #22c55e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .pad {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    max-height: 60vh;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1.5rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: background 120ms ease;
+  }
+  .pad.armed { background: color-mix(in srgb, var(--danger, #ef4444) 18%, var(--card)); }
+  .pad.go { background: color-mix(in srgb, var(--go) 30%, var(--card)); }
+  .pad.result { background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--muted); font-weight: 600; }
+  td.ms { font-variant-numeric: tabular-nums; }
+
+  button.clear {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.clear:hover { border-color: var(--accent); color: var(--text); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>098 — Reaction Time Ledger</h1>
+  <p class="intro">
+    Tap when the pad turns green. Every attempt is written to an
+    IndexedDB object store, so your best times survive a reload — this
+    isn't a high-score list held in a JavaScript variable.
+  </p>
+
+  <div class="pad" id="pad">Tap to arm</div>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>Time</th><th>ms</th></tr>
+    </thead>
+    <tbody id="rows">
+      <tr><td colspan="3">No attempts recorded yet.</td></tr>
+    </tbody>
+  </table>
+
+  <button class="clear" id="clearBtn" type="button">Clear history</button>
+
+  <footer>
+    Persistence uses <code>indexedDB.open()</code> with a single
+    <code>attempts</code> object store (auto-incrementing key), written
+    via a <code>readwrite</code> transaction on each tap and read back
+    with a cursor sorted newest-first on load — a structured, asynchronous
+    store rather than <code>localStorage</code>, which is what the rest
+    of this lab's persistence-free experiments have used so far.
+  </footer>
+</main>
+
+<script>
+  const pad = document.getElementById('pad');
+  const rowsEl = document.getElementById('rows');
+  const clearBtn = document.getElementById('clearBtn');
+
+  const DB_NAME = 'reaction-time-ledger';
+  const STORE_NAME = 'attempts';
+  let dbPromise = null;
+
+  function openDb() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+
+  async function addAttempt(ms) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).add({ ms, at: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function loadAttempts() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const results = [];
+      const req = store.openCursor(null, 'prev');
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor && results.length < 10) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function clearAttempts() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  function renderRows(attempts) {
+    if (!attempts.length) {
+      rowsEl.innerHTML = '<tr><td colspan="3">No attempts recorded yet.</td></tr>';
+      return;
+    }
+    rowsEl.innerHTML = attempts
+      .map((a, i) => {
+        const time = new Date(a.at).toLocaleTimeString();
+        return `<tr><td>${i + 1}</td><td>${time}</td><td class="ms">${a.ms}</td></tr>`;
+      })
+      .join('');
+  }
+
+  let state = 'idle'; // idle -> armed -> go -> result
+  let armTimeout = null;
+  let goAt = 0;
+
+  function reset(label) {
+    state = 'idle';
+    pad.className = 'pad';
+    pad.textContent = label || 'Tap to arm';
+  }
+
+  pad.addEventListener('pointerdown', async (e) => {
+    e.preventDefault();
+    if (state === 'idle' || state === 'result') {
+      state = 'armed';
+      pad.className = 'pad armed';
+      pad.textContent = 'Wait for green…';
+      const delay = 1000 + Math.random() * 2500;
+      armTimeout = setTimeout(() => {
+        state = 'go';
+        goAt = performance.now();
+        pad.className = 'pad go';
+        pad.textContent = 'Tap now!';
+      }, delay);
+    } else if (state === 'armed') {
+      clearTimeout(armTimeout);
+      reset('Too soon — tap to try again');
+    } else if (state === 'go') {
+      const ms = Math.round(performance.now() - goAt);
+      pad.className = 'pad result';
+      pad.textContent = `${ms} ms — tap to try again`;
+      state = 'result';
+      await addAttempt(ms);
+      renderRows(await loadAttempts());
+    }
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    await clearAttempts();
+    renderRows([]);
+  });
+
+  if (!('indexedDB' in window)) {
+    pad.textContent = 'IndexedDB is not available in this browser.';
+    pad.style.cursor = 'default';
+  } else {
+    loadAttempts().then(renderRows);
+  }
+</script>
+</body>
+</html>
