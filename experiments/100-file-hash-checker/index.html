@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>100 — File Hash Checker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .drop {
+    width: 100%;
+    border-radius: 14px;
+    border: 1px dashed var(--border);
+    background: var(--card);
+    color: var(--muted);
+    padding: 2rem 1.25rem;
+    text-align: center;
+    font-size: 0.9rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop input { display: none; }
+
+  .field {
+    display: grid;
+    gap: 0.3rem;
+  }
+  .field span.label {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .field .value {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .field code {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.78rem;
+    word-break: break-all;
+  }
+  .field button {
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .field button:hover { border-color: var(--accent); color: var(--text); }
+
+  .meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>100 — File Hash Checker</h1>
+  <p class="intro">
+    Pick a file and it's hashed entirely in the browser with the Web
+    Crypto API — nothing is uploaded anywhere. Useful for the same reason
+    a checksum on a download page is: confirming a file wasn't corrupted
+    or swapped in transit.
+  </p>
+
+  <label class="drop" id="drop" for="fileInput">
+    Tap to choose a file, or drop one here
+    <input type="file" id="fileInput">
+  </label>
+
+  <p class="meta" id="meta"></p>
+
+  <div class="field">
+    <span class="label">SHA-256</span>
+    <div class="value">
+      <code id="sha256">—</code>
+      <button type="button" data-copy="sha256">Copy</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <span class="label">SHA-1</span>
+    <div class="value">
+      <code id="sha1">—</code>
+      <button type="button" data-copy="sha1">Copy</button>
+    </div>
+  </div>
+
+  <footer>
+    Uses <code>crypto.subtle.digest()</code> on the file's
+    <code>ArrayBuffer</code> — a native, constant-memory-safe digest
+    rather than a hand-rolled hash loop. The drop zone accepts HTML5
+    drag-and-drop on desktop, but the <code>&lt;input type="file"&gt;</code>
+    it wraps is the actual control, so tapping it opens the normal
+    mobile file picker too.
+  </footer>
+</main>
+
+<script>
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const meta = document.getElementById('meta');
+  const sha256El = document.getElementById('sha256');
+  const sha1El = document.getElementById('sha1');
+
+  function toHex(buffer) {
+    return Array.from(new Uint8Array(buffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  async function hashFile(file) {
+    meta.textContent = `Hashing ${file.name} (${(file.size / 1024).toFixed(1)} KB)…`;
+    sha256El.textContent = '—';
+    sha1El.textContent = '—';
+    const buffer = await file.arrayBuffer();
+    const [digest256, digest1] = await Promise.all([
+      crypto.subtle.digest('SHA-256', buffer),
+      crypto.subtle.digest('SHA-1', buffer),
+    ]);
+    sha256El.textContent = toHex(digest256);
+    sha1El.textContent = toHex(digest1);
+    meta.textContent = `${file.name} — ${(file.size / 1024).toFixed(1)} KB`;
+  }
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) hashFile(file);
+  });
+
+  ['dragover', 'dragenter'].forEach((type) => {
+    drop.addEventListener(type, (e) => {
+      e.preventDefault();
+      drop.classList.add('over');
+    });
+  });
+  ['dragleave', 'dragend', 'drop'].forEach((type) => {
+    drop.addEventListener(type, () => drop.classList.remove('over'));
+  });
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) hashFile(file);
+  });
+
+  document.querySelectorAll('button[data-copy]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const el = document.getElementById(btn.dataset.copy);
+      if (!el.textContent || el.textContent === '—') return;
+      await navigator.clipboard.writeText(el.textContent);
+      const original = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = original; }, 1200);
+    });
+  });
+
+  if (!(window.crypto && crypto.subtle)) {
+    meta.textContent = 'Web Crypto API is not available in this browser.';
+    drop.style.pointerEvents = 'none';
+  }
+</script>
+</body>
+</html>
