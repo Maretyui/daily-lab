@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>102 — Device Status Dashboard</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --warn: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  @media (min-width: 420px) {
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    min-width: 0;
+  }
+
+  .card h2 {
+    margin: 0 0 0.5rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+
+  .card .value {
+    font-size: 1.3rem;
+    font-weight: 600;
+    word-break: break-word;
+  }
+  .card .value.na { color: var(--muted); font-size: 0.95rem; font-weight: 400; }
+
+  .card .sub {
+    margin-top: 0.3rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .bar {
+    margin-top: 0.5rem;
+    height: 8px;
+    border-radius: 999px;
+    background: #10131a;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .bar > span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    transition: width 300ms ease, background 300ms ease;
+  }
+  .bar > span.low { background: var(--warn); }
+
+  .dot {
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    border-radius: 999px;
+    margin-right: 0.4em;
+    background: var(--muted);
+  }
+  .dot.on { background: var(--accent); }
+
+  footer {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>102 — Device Status Dashboard</h1>
+  <p class="intro">
+    A handful of device/browser introspection APIs, all live-updating
+    in place — no reload needed to see them change. Unplug your
+    charger or toggle flight mode and watch the cards react.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Battery</h2>
+      <div class="value" id="batteryLevel">—</div>
+      <div class="bar"><span id="batteryBar"></span></div>
+      <div class="sub" id="batteryState"></div>
+    </div>
+
+    <div class="card">
+      <h2>Connection</h2>
+      <div class="value" id="connType">—</div>
+      <div class="sub" id="connDetail"></div>
+    </div>
+
+    <div class="card">
+      <h2>Online</h2>
+      <div class="value"><span class="dot" id="onlineDot"></span><span id="onlineText">—</span></div>
+      <div class="sub" id="onlineSince"></div>
+    </div>
+
+    <div class="card">
+      <h2>Tab visibility</h2>
+      <div class="value"><span class="dot" id="visDot"></span><span id="visText">—</span></div>
+      <div class="sub" id="visSince"></div>
+    </div>
+  </div>
+
+  <footer>
+    Battery Status API (<code>navigator.getBattery()</code>) and
+    Network Information API (<code>navigator.connection</code>) are
+    Chromium-only — cards show "not supported here" on Firefox/Safari
+    instead of guessing. Online/offline and
+    <code>visibilitychange</code> work everywhere.
+  </footer>
+</main>
+
+<script>
+  function since(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    return `${Math.floor(m / 60)}h ago`;
+  }
+
+  // Battery Status API
+  const batteryLevel = document.getElementById('batteryLevel');
+  const batteryBar = document.getElementById('batteryBar');
+  const batteryState = document.getElementById('batteryState');
+
+  if ('getBattery' in navigator) {
+    navigator.getBattery().then(battery => {
+      function render() {
+        const pct = Math.round(battery.level * 100);
+        batteryLevel.textContent = `${pct}%`;
+        batteryBar.style.width = `${pct}%`;
+        batteryBar.classList.toggle('low', pct <= 20 && !battery.charging);
+        batteryState.textContent = battery.charging
+          ? `Charging — full in ${battery.chargingTime === Infinity ? '…' : Math.round(battery.chargingTime / 60) + ' min'}`
+          : `On battery — ${battery.dischargingTime === Infinity ? 'estimating time left…' : Math.round(battery.dischargingTime / 60) + ' min left'}`;
+      }
+      render();
+      battery.addEventListener('levelchange', render);
+      battery.addEventListener('chargingchange', render);
+      battery.addEventListener('chargingtimechange', render);
+      battery.addEventListener('dischargingtimechange', render);
+    });
+  } else {
+    batteryLevel.textContent = 'n/a';
+    batteryLevel.classList.add('na');
+    batteryState.textContent = 'Battery Status API not supported here.';
+  }
+
+  // Network Information API
+  const connType = document.getElementById('connType');
+  const connDetail = document.getElementById('connDetail');
+  const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+
+  if (connection) {
+    function renderConn() {
+      connType.textContent = connection.effectiveType ? connection.effectiveType.toUpperCase() : 'unknown';
+      const bits = [];
+      if (connection.downlink !== undefined) bits.push(`${connection.downlink} Mb/s est.`);
+      if (connection.rtt !== undefined) bits.push(`${connection.rtt}ms RTT`);
+      if (connection.saveData) bits.push('data saver on');
+      connDetail.textContent = bits.join(' · ');
+    }
+    renderConn();
+    connection.addEventListener('change', renderConn);
+  } else {
+    connType.textContent = 'n/a';
+    connType.classList.add('na');
+    connDetail.textContent = 'Network Information API not supported here.';
+  }
+
+  // Online / offline
+  const onlineDot = document.getElementById('onlineDot');
+  const onlineText = document.getElementById('onlineText');
+  const onlineSince = document.getElementById('onlineSince');
+  let onlineChangedAt = Date.now();
+
+  function renderOnline() {
+    onlineDot.classList.toggle('on', navigator.onLine);
+    onlineText.textContent = navigator.onLine ? 'Online' : 'Offline';
+    onlineSince.textContent = `since ${since(onlineChangedAt)}`;
+  }
+  window.addEventListener('online', () => { onlineChangedAt = Date.now(); renderOnline(); });
+  window.addEventListener('offline', () => { onlineChangedAt = Date.now(); renderOnline(); });
+  renderOnline();
+
+  // Page visibility
+  const visDot = document.getElementById('visDot');
+  const visText = document.getElementById('visText');
+  const visSince = document.getElementById('visSince');
+  let visChangedAt = Date.now();
+
+  function renderVis() {
+    const visible = document.visibilityState === 'visible';
+    visDot.classList.toggle('on', visible);
+    visText.textContent = visible ? 'Visible' : 'Hidden';
+    visSince.textContent = `since ${since(visChangedAt)}`;
+  }
+  document.addEventListener('visibilitychange', () => { visChangedAt = Date.now(); renderVis(); });
+  renderVis();
+
+  setInterval(() => { renderOnline(); renderVis(); }, 5000);
+</script>
+</body>
+</html>
