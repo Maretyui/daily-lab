@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>101 — MIDI Note Visualizer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+  }
+  .status.connected { color: var(--accent); border-color: var(--accent); }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    touch-action: none;
+  }
+
+  .keyboard {
+    position: relative;
+    width: 100%;
+    height: 140px;
+    user-select: none;
+  }
+
+  .white-keys {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    gap: 2px;
+  }
+
+  .white-key {
+    flex: 1 1 0;
+    background: #eef0f4;
+    border: 1px solid var(--border);
+    border-radius: 0 0 6px 6px;
+    touch-action: manipulation;
+  }
+  .white-key.active { background: var(--accent); }
+
+  .black-keys {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 62%;
+    pointer-events: none;
+  }
+
+  .black-key {
+    position: absolute;
+    width: 8%;
+    height: 100%;
+    transform: translateX(-50%);
+    background: #10131a;
+    border: 1px solid #000;
+    border-radius: 0 0 4px 4px;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+  .black-key.active { background: var(--accent); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>101 — MIDI Note Visualizer</h1>
+  <p class="intro">
+    Play the on-screen keys with mouse or finger, or plug in a MIDI
+    keyboard — every note-on lights up its key and adds a rising bar
+    to the roll above, in real time.
+  </p>
+
+  <div class="status" id="status">Checking for Web MIDI…</div>
+
+  <canvas id="roll" width="600" height="220"></canvas>
+
+  <div class="keyboard" id="keyboard">
+    <div class="white-keys" id="whiteKeys"></div>
+    <div class="black-keys" id="blackKeys"></div>
+  </div>
+
+  <footer>
+    Falls back to a plain clickable/touchable keyboard everywhere.
+    Where <code>navigator.requestMIDIAccess()</code> is supported
+    (Chrome/Edge, not Firefox or iOS Safari) and a device is
+    connected, its <code>noteon</code>/<code>noteoff</code> messages
+    drive the same visualizer and synth as the on-screen keys.
+  </footer>
+</main>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const whiteKeysEl = document.getElementById('whiteKeys');
+  const blackKeysEl = document.getElementById('blackKeys');
+  const canvas = document.getElementById('roll');
+  const ctx = canvas.getContext('2d');
+
+  // One octave, MIDI note numbers for C4..B4.
+  const WHITE = [60, 62, 64, 65, 67, 69, 71];
+  const BLACK = [
+    { note: 61, afterIndex: 0 },
+    { note: 63, afterIndex: 1 },
+    { note: 66, afterIndex: 3 },
+    { note: 68, afterIndex: 4 },
+    { note: 70, afterIndex: 5 },
+  ];
+  const LANES = [...WHITE, ...BLACK.map(b => b.note)].sort((a, b) => a - b);
+
+  const keyEls = new Map();
+  WHITE.forEach(note => {
+    const el = document.createElement('div');
+    el.className = 'white-key';
+    el.dataset.note = note;
+    whiteKeysEl.appendChild(el);
+    keyEls.set(note, el);
+  });
+  BLACK.forEach(({ note, afterIndex }) => {
+    const el = document.createElement('div');
+    el.className = 'black-key';
+    el.style.left = ((afterIndex + 1) * (100 / WHITE.length)) + '%';
+    el.dataset.note = note;
+    blackKeysEl.appendChild(el);
+    keyEls.set(note, el);
+  });
+
+  let audioCtx = null;
+  const activeOsc = new Map();
+  const activeSince = new Map();
+
+  function noteToFreq(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
+  }
+
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function noteOn(note, velocity = 0.8) {
+    const key = keyEls.get(note);
+    if (key) key.classList.add('active');
+    if (activeOsc.has(note)) return;
+
+    const ac = ensureAudio();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = noteToFreq(note);
+    gain.gain.value = 0;
+    gain.gain.linearRampToValueAtTime(Math.min(velocity, 1) * 0.25, ac.currentTime + 0.02);
+    osc.connect(gain).connect(ac.destination);
+    osc.start();
+    activeOsc.set(note, { osc, gain });
+    activeSince.set(note, performance.now());
+  }
+
+  function noteOff(note) {
+    const key = keyEls.get(note);
+    if (key) key.classList.remove('active');
+    const voice = activeOsc.get(note);
+    if (voice) {
+      const ac = ensureAudio();
+      voice.gain.gain.linearRampToValueAtTime(0, ac.currentTime + 0.08);
+      voice.osc.stop(ac.currentTime + 0.1);
+      activeOsc.delete(note);
+    }
+    activeSince.delete(note);
+  }
+
+  keyEls.forEach((el, note) => {
+    el.addEventListener('pointerdown', e => { e.preventDefault(); noteOn(note); });
+    el.addEventListener('pointerup', () => noteOff(note));
+    el.addEventListener('pointerleave', () => noteOff(note));
+    el.addEventListener('pointercancel', () => noteOff(note));
+  });
+
+  // Piano roll: one vertical lane per key in the octave, bar height
+  // reflects how long the note has been held.
+  function draw() {
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#151a24';
+    ctx.fillRect(0, 0, w, h);
+
+    const laneWidth = w / LANES.length;
+    const now = performance.now();
+    LANES.forEach((note, i) => {
+      if (!activeSince.has(note)) return;
+      const held = now - activeSince.get(note);
+      const barHeight = Math.min(h, 20 + held * 0.15);
+      const isWhite = WHITE.includes(note);
+      ctx.fillStyle = isWhite ? '#14b8a6' : '#5eead4';
+      ctx.fillRect(i * laneWidth + 2, h - barHeight, laneWidth - 4, barHeight);
+    });
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  if (!('requestMIDIAccess' in navigator)) {
+    statusEl.textContent = 'Web MIDI API not supported here — on-screen keys still work.';
+  } else {
+    navigator.requestMIDIAccess().then(access => {
+      const inputs = [...access.inputs.values()];
+      if (inputs.length === 0) {
+        statusEl.textContent = 'Web MIDI ready, no device connected — on-screen keys still work.';
+      } else {
+        statusEl.textContent = `Connected: ${inputs.map(i => i.name).join(', ')}`;
+        statusEl.classList.add('connected');
+      }
+      access.onstatechange = () => {
+        const names = [...access.inputs.values()].map(i => i.name);
+        statusEl.textContent = names.length
+          ? `Connected: ${names.join(', ')}`
+          : 'Web MIDI ready, no device connected — on-screen keys still work.';
+        statusEl.classList.toggle('connected', names.length > 0);
+      };
+      access.inputs.forEach(input => {
+        input.onmidimessage = ({ data }) => {
+          const [status, note, velocity] = data;
+          const command = status & 0xf0;
+          if (command === 144 && velocity > 0) noteOn(note, velocity / 127);
+          else if (command === 128 || (command === 144 && velocity === 0)) noteOff(note);
+        };
+      });
+    }).catch(() => {
+      statusEl.textContent = 'MIDI access denied — on-screen keys still work.';
+    });
+  }
+</script>
+</body>
+</html>
