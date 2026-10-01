@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>103 — Floyd–Steinberg Dither</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .drop {
+    width: 100%;
+    border-radius: 14px;
+    border: 1px dashed var(--border);
+    background: var(--card);
+    color: var(--muted);
+    padding: 2rem 1.25rem;
+    text-align: center;
+    font-size: 0.9rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop input { display: none; }
+
+  .controls {
+    display: grid;
+    gap: 0.9rem;
+  }
+  .field {
+    display: grid;
+    gap: 0.4rem;
+  }
+  .field .row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .field input[type="range"] {
+    width: 100%;
+    touch-action: manipulation;
+  }
+  .swatches {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .swatches label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .swatches input[type="color"] {
+    width: 2.2rem;
+    height: 2.2rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: none;
+    padding: 0;
+    touch-action: manipulation;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+
+  button#save {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button#save:hover { border-color: var(--accent); color: var(--text); }
+  button#save:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>103 — Floyd–Steinberg Dither</h1>
+  <p class="intro">
+    Pick a photo and it's reduced to two colors with Floyd–Steinberg
+    error-diffusion dithering, run entirely on the pixel data in a
+    &lt;canvas&gt; — no server, no library.
+  </p>
+
+  <label class="drop" id="drop" for="fileInput">
+    Tap to choose an image, or drop one here
+    <input type="file" id="fileInput" accept="image/*">
+  </label>
+
+  <div class="controls">
+    <div class="field">
+      <div class="row">
+        <span>Threshold</span>
+        <span id="thresholdValue">128</span>
+      </div>
+      <input type="range" id="threshold" min="1" max="254" value="128">
+    </div>
+    <div class="swatches">
+      <label>Dark <input type="color" id="darkColor" value="#0b0e14"></label>
+      <label>Light <input type="color" id="lightColor" value="#e6e9ef"></label>
+    </div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <button type="button" id="save" disabled>Save PNG</button>
+
+  <footer>
+    Each pixel is rounded to pure black or white, and the rounding
+    <code>error</code> is spread to its still-unprocessed neighbors
+    (7/16 right, 3/16 below-left, 5/16 below, 1/16 below-right) instead
+    of being discarded — the classic 1976 algorithm. The two output
+    colors are swapped in afterwards, so you can preview any duotone.
+  </footer>
+</main>
+
+<script>
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const thresholdInput = document.getElementById('threshold');
+  const thresholdValue = document.getElementById('thresholdValue');
+  const darkColorInput = document.getElementById('darkColor');
+  const lightColorInput = document.getElementById('lightColor');
+  const saveBtn = document.getElementById('save');
+
+  let sourceImageData = null;
+  const MAX_DIM = 640;
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function loadImage(file) {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      sourceImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      saveBtn.disabled = false;
+      render();
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  }
+
+  function render() {
+    if (!sourceImageData) return;
+    const { width, height } = sourceImageData;
+    // Grayscale working buffer so error diffusion doesn't clip per-channel.
+    const gray = new Float32Array(width * height);
+    const src = sourceImageData.data;
+    for (let i = 0, p = 0; i < src.length; i += 4, p++) {
+      gray[p] = 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
+    }
+
+    const threshold = Number(thresholdInput.value);
+    const dark = hexToRgb(darkColorInput.value);
+    const light = hexToRgb(lightColorInput.value);
+
+    const out = ctx.createImageData(width, height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = y * width + x;
+        const old = gray[idx];
+        const isLight = old >= threshold;
+        const newVal = isLight ? 255 : 0;
+        const error = old - newVal;
+
+        const color = isLight ? light : dark;
+        const o = idx * 4;
+        out.data[o] = color[0];
+        out.data[o + 1] = color[1];
+        out.data[o + 2] = color[2];
+        out.data[o + 3] = 255;
+
+        if (x + 1 < width) gray[idx + 1] += (error * 7) / 16;
+        if (y + 1 < height) {
+          if (x - 1 >= 0) gray[idx + width - 1] += (error * 3) / 16;
+          gray[idx + width] += (error * 5) / 16;
+          if (x + 1 < width) gray[idx + width + 1] += (error * 1) / 16;
+        }
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) loadImage(file);
+  });
+
+  ['dragover', 'dragenter'].forEach((type) => {
+    drop.addEventListener(type, (e) => {
+      e.preventDefault();
+      drop.classList.add('over');
+    });
+  });
+  ['dragleave', 'dragend', 'drop'].forEach((type) => {
+    drop.addEventListener(type, () => drop.classList.remove('over'));
+  });
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) loadImage(file);
+  });
+
+  thresholdInput.addEventListener('input', () => {
+    thresholdValue.textContent = thresholdInput.value;
+    render();
+  });
+  darkColorInput.addEventListener('input', render);
+  lightColorInput.addEventListener('input', render);
+
+  saveBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'dither.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+</script>
+</body>
+</html>
