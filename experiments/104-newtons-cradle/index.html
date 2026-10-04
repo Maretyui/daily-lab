@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>104 — Newton's Cradle</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #38bdf8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.15rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .stage {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 0.75rem;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    touch-action: none;
+    border-radius: 10px;
+  }
+
+  .row {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .row strong { color: var(--accent); }
+
+  button {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+    justify-self: center;
+  }
+  button:hover { border-color: var(--accent); color: var(--text); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>104 — Newton's Cradle</h1>
+  <p class="intro">
+    Drag either end ball outward and let go. Velocity carries through the
+    resting chain one collision at a time, exactly like the desk toy —
+    no physics library, just small-angle pendulum motion and a swap of
+    velocity on contact.
+  </p>
+
+  <div class="stage">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="row">
+    <span>Swings: <strong id="swingCount">0</strong></span>
+    <span>Transfers: <strong id="transferCount">0</strong></span>
+  </div>
+
+  <button type="button" id="resetBtn">Reset</button>
+
+  <footer>
+    Each ball's horizontal offset follows simple harmonic motion
+    (<code>a = -(g / L) · s</code>) instead of a full nonlinear pendulum,
+    which keeps the per-frame math to one multiply per ball. A collision
+    just swaps two adjacent balls' velocities and nudges them apart —
+    done a few passes a frame so a hit at one end finishes propagating
+    all the way to the other before the next frame draws.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const swingCountEl = document.getElementById('swingCount');
+  const transferCountEl = document.getElementById('transferCount');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const N = 5;
+  const G = 2600;
+  const DAMPING = 0.9997;
+  const balls = [];
+  let L = 240;
+  let radius = 24;
+  let anchorY = 40;
+  let swings = 0;
+  let transfers = 0;
+  let dragIndex = -1;
+  let activePointerId = null;
+
+  function layout() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const width = Math.round(rect.width - 24);
+    const height = Math.round(width * 0.62);
+    canvas.width = width;
+    canvas.height = height;
+
+    radius = Math.min(28, width / (N * 2.6));
+    anchorY = Math.max(32, height * 0.12);
+    L = height - anchorY - radius * 1.6;
+
+    const centerX = width / 2;
+    const spacing = radius * 2;
+    for (let i = 0; i < N; i++) {
+      const anchorX = centerX + (i - (N - 1) / 2) * spacing;
+      if (!balls[i]) balls[i] = { s: 0, v: 0 };
+      balls[i].anchorX = anchorX;
+    }
+  }
+
+  function ballX(b) { return b.anchorX + b.s; }
+  function ballY(b) {
+    const s = Math.max(-L, Math.min(L, b.s));
+    return anchorY + Math.sqrt(Math.max(L * L - s * s, 0));
+  }
+
+  function step(dt) {
+    for (let i = 0; i < N; i++) {
+      if (i === dragIndex) continue;
+      const b = balls[i];
+      b.v += -(G / L) * b.s * dt;
+      b.v *= DAMPING;
+      b.s += b.v * dt;
+    }
+
+    for (let pass = 0; pass < 3; pass++) {
+      for (let i = 0; i < N - 1; i++) {
+        const a = balls[i];
+        const b = balls[i + 1];
+        const gap = ballX(b) - ballX(a) - radius * 2;
+        if (gap < 0 && a.v > b.v) {
+          const tmp = a.v;
+          a.v = b.v;
+          b.v = tmp;
+          a.s += gap / 2;
+          b.s -= gap / 2;
+          transfers++;
+          transferCountEl.textContent = transfers;
+        }
+      }
+    }
+  }
+
+  function draw() {
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.strokeStyle = '#2a3245';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(8, anchorY - 10);
+    ctx.lineTo(width - 8, anchorY - 10);
+    ctx.stroke();
+
+    for (let i = 0; i < N; i++) {
+      const b = balls[i];
+      const x = ballX(b);
+      const y = ballY(b);
+
+      ctx.strokeStyle = '#3a445c';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(b.anchorX, anchorY - 10);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      const grad = ctx.createRadialGradient(
+        x - radius * 0.3, y - radius * 0.3, radius * 0.2,
+        x, y, radius
+      );
+      grad.addColorStop(0, '#bff0ff');
+      grad.addColorStop(1, '#38bdf8');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function pointerToLocal(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    return (e.clientX - rect.left) * scaleX;
+  }
+
+  function nearestEndBall(localX) {
+    const first = balls[0];
+    const last = balls[N - 1];
+    const distFirst = Math.abs(ballX(first) - localX);
+    const distLast = Math.abs(ballX(last) - localX);
+    if (Math.min(distFirst, distLast) > radius * 3) return -1;
+    return distFirst < distLast ? 0 : N - 1;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const localX = pointerToLocal(e);
+    const idx = nearestEndBall(localX);
+    if (idx === -1) return;
+    dragIndex = idx;
+    activePointerId = e.pointerId;
+    balls[idx].v = 0;
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (dragIndex === -1 || e.pointerId !== activePointerId) return;
+    const localX = pointerToLocal(e);
+    const b = balls[dragIndex];
+    const maxPull = L * 0.75;
+    let s = localX - b.anchorX;
+    s = Math.max(-maxPull, Math.min(maxPull, s));
+    if (dragIndex === 0) s = Math.min(s, 0);
+    if (dragIndex === N - 1) s = Math.max(s, 0);
+    b.s = s;
+  });
+
+  function release(e) {
+    if (dragIndex === -1 || e.pointerId !== activePointerId) return;
+    if (Math.abs(balls[dragIndex].s) > radius) {
+      swings++;
+      swingCountEl.textContent = swings;
+    }
+    dragIndex = -1;
+    activePointerId = null;
+  }
+
+  canvas.addEventListener('pointerup', release);
+  canvas.addEventListener('pointercancel', release);
+
+  function reset() {
+    for (const b of balls) { b.s = 0; b.v = 0; }
+    swings = 0;
+    transfers = 0;
+    swingCountEl.textContent = '0';
+    transferCountEl.textContent = '0';
+  }
+  resetBtn.addEventListener('click', reset);
+
+  let lastTime = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - lastTime) / 1000, 1 / 30);
+    lastTime = now;
+    step(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', layout);
+  layout();
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
