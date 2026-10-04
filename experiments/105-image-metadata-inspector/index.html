@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>105 — Image Metadata Inspector</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #a78bfa;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { font-size: 1.15rem; margin: 0 0 0.4rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .drop {
+    width: 100%;
+    border-radius: 14px;
+    border: 1px dashed var(--border);
+    background: var(--card);
+    color: var(--muted);
+    padding: 2rem 1.25rem;
+    text-align: center;
+    font-size: 0.9rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop input { display: none; }
+
+  .result {
+    display: none;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    overflow: hidden;
+  }
+  .result.show { display: block; }
+
+  .result h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0;
+    padding: 0.9rem 1rem 0.5rem;
+  }
+
+  dl.fields {
+    margin: 0;
+    padding: 0 1rem 1rem;
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    gap: 0.4rem 1rem;
+    font-size: 0.85rem;
+  }
+  dl.fields dt { color: var(--muted); }
+  dl.fields dd {
+    margin: 0;
+    color: var(--text);
+    word-break: break-word;
+    text-align: right;
+  }
+
+  .empty {
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>105 — Image Metadata Inspector</h1>
+  <p class="intro">
+    Pick a JPEG or PNG and its header bytes are parsed by hand with a
+    <code>DataView</code> — JPEG's EXIF tags, PNG's chunk list — no
+    library, and the pixels themselves are never decoded.
+  </p>
+
+  <label class="drop" id="drop" for="fileInput">
+    Tap to choose a JPEG or PNG, or drop one here
+    <input type="file" id="fileInput" accept="image/jpeg,image/png">
+  </label>
+
+  <div class="result" id="result">
+    <h2 id="resultTitle">Metadata</h2>
+    <dl class="fields" id="fields"></dl>
+  </div>
+
+  <footer>
+    JPEG stores EXIF inside an APP1 segment as a little TIFF structure —
+    a byte-order marker, then an IFD of 12-byte entries pointing at tag,
+    type and either an inline value or an offset into the rest of the
+    segment. PNG instead just chains labelled, length-prefixed chunks
+    one after another from byte 8 onward; <code>IHDR</code> always comes
+    first and gives the real pixel dimensions straight from the file,
+    with no decode needed.
+  </footer>
+</main>
+
+<script>
+  const drop = document.getElementById('drop');
+  const fileInput = document.getElementById('fileInput');
+  const result = document.getElementById('result');
+  const resultTitle = document.getElementById('resultTitle');
+  const fields = document.getElementById('fields');
+
+  const EXIF_TAGS = {
+    0x010f: 'Make',
+    0x0110: 'Model',
+    0x0112: 'Orientation',
+    0x0132: 'Modified',
+    0x9003: 'Captured',
+    0x829a: 'Exposure time',
+    0x920a: 'Focal length',
+  };
+
+  const ORIENTATIONS = {
+    1: 'Normal', 2: 'Flip H', 3: 'Rotate 180', 4: 'Flip V',
+    5: 'Transpose', 6: 'Rotate 90', 7: 'Transverse', 8: 'Rotate 270',
+  };
+
+  function addField(label, value) {
+    const dt = document.createElement('dt');
+    dt.textContent = label;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    fields.append(dt, dd);
+  }
+
+  function readAscii(view, offset, length) {
+    let out = '';
+    for (let i = 0; i < length; i++) {
+      const code = view.getUint8(offset + i);
+      if (code === 0) break;
+      out += String.fromCharCode(code);
+    }
+    return out;
+  }
+
+  function parseExif(view, tiffStart) {
+    const little = view.getUint16(tiffStart, false) === 0x4949;
+    const ifdOffset = view.getUint32(tiffStart + 4, little);
+    const ifdStart = tiffStart + ifdOffset;
+    const count = view.getUint16(ifdStart, little);
+    const found = [];
+
+    for (let i = 0; i < count; i++) {
+      const entry = ifdStart + 2 + i * 12;
+      const tag = view.getUint16(entry, little);
+      const type = view.getUint16(entry + 2, little);
+      const num = view.getUint32(entry + 4, little);
+      const valueOffset = entry + 8;
+      const name = EXIF_TAGS[tag];
+      if (!name) continue;
+
+      if (type === 2) {
+        const dataStart = num <= 4 ? valueOffset : tiffStart + view.getUint32(valueOffset, little);
+        found.push([name, readAscii(view, dataStart, num).trim()]);
+      } else if (type === 3) {
+        const raw = view.getUint16(valueOffset, little);
+        found.push([name, tag === 0x0112 ? (ORIENTATIONS[raw] || raw) : raw]);
+      } else if (type === 5) {
+        const dataStart = tiffStart + view.getUint32(valueOffset, little);
+        const numerator = view.getUint32(dataStart, little);
+        const denominator = view.getUint32(dataStart + 4, little);
+        found.push([name, denominator ? (numerator / denominator).toFixed(3) : String(numerator)]);
+      }
+    }
+    return found;
+  }
+
+  function parseJpeg(buffer) {
+    const view = new DataView(buffer);
+    if (view.getUint16(0) !== 0xffd8) return null;
+
+    let offset = 2;
+    while (offset < view.byteLength - 4) {
+      const marker = view.getUint16(offset);
+      if ((marker & 0xff00) !== 0xff00) break;
+      const segmentLength = view.getUint16(offset + 2);
+
+      if (marker === 0xffe1) {
+        const header = readAscii(view, offset + 4, 6);
+        if (header === 'Exif') {
+          return parseExif(view, offset + 4 + 6);
+        }
+      }
+      if (marker === 0xffda) break; // Start of scan — no more metadata segments.
+      offset += 2 + segmentLength;
+    }
+    return [];
+  }
+
+  function parsePng(buffer) {
+    const view = new DataView(buffer);
+    const width = view.getUint32(16);
+    const height = view.getUint32(20);
+    const bitDepth = view.getUint8(24);
+    const colorType = view.getUint8(25);
+
+    const chunks = [];
+    let offset = 8;
+    while (offset + 8 <= view.byteLength) {
+      const length = view.getUint32(offset);
+      const type = readAscii(view, offset + 4, 4);
+      chunks.push(type);
+      if (type === 'IEND') break;
+      offset += 12 + length;
+    }
+
+    return [
+      ['Pixel size', `${width} × ${height}`],
+      ['Bit depth', String(bitDepth)],
+      ['Color type', String(colorType)],
+      ['Chunks found', chunks.join(', ')],
+    ];
+  }
+
+  function inspect(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const buffer = reader.result;
+      const view = new DataView(buffer);
+      const isPng = view.byteLength > 8 && view.getUint32(0) === 0x89504e47;
+      const isJpeg = view.byteLength > 2 && view.getUint16(0) === 0xffd8;
+
+      fields.innerHTML = '';
+      addField('File', file.name);
+      addField('Size', `${(file.size / 1024).toFixed(1)} KB`);
+
+      let tags = [];
+      if (isJpeg) {
+        resultTitle.textContent = 'JPEG — EXIF tags';
+        tags = parseJpeg(buffer) || [];
+      } else if (isPng) {
+        resultTitle.textContent = 'PNG — header + chunks';
+        tags = parsePng(buffer);
+      } else {
+        resultTitle.textContent = 'Unrecognized format';
+      }
+
+      if (tags.length === 0 && (isJpeg || isPng)) {
+        addField('Note', isJpeg ? 'No EXIF segment found' : 'No chunks found');
+      }
+      tags.forEach(([label, value]) => addField(label, String(value)));
+
+      result.classList.add('show');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) inspect(file);
+  });
+
+  ['dragover', 'dragenter'].forEach((type) => {
+    drop.addEventListener(type, (e) => {
+      e.preventDefault();
+      drop.classList.add('over');
+    });
+  });
+  ['dragleave', 'dragend', 'drop'].forEach((type) => {
+    drop.addEventListener(type, () => drop.classList.remove('over'));
+  });
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) inspect(file);
+  });
+</script>
+</body>
+</html>
