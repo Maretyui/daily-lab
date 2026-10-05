@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>107 — Shape Outside Playground</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #fb7185;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { font-size: 1.15rem; margin: 0 0 0.4rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.9rem;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 1rem 1.1rem;
+  }
+
+  .controls label {
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .controls select,
+  .controls input[type="range"] {
+    width: 100%;
+  }
+
+  .shapes {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .shapes button {
+    flex: 1 1 auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 0.5rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .shapes button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.85rem;
+  }
+
+  .wrap {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 1.25rem;
+    overflow: hidden;
+  }
+
+  .wrap p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+    text-align: justify;
+  }
+
+  .shape {
+    float: left;
+    width: 150px;
+    height: 150px;
+    background: linear-gradient(145deg, var(--accent), #fda4af);
+    shape-outside: circle(50% at 50% 50%);
+    clip-path: circle(50% at 50% 50%);
+    shape-margin: 1rem;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .wrap[data-side="right"] .shape {
+    float: right;
+    margin-right: 0;
+    margin-left: 0.5rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>107 — Shape Outside Playground</h1>
+  <p class="intro">
+    The pink shape is a plain floated <code>&lt;div&gt;</code> — the
+    paragraph wraps to its actual outline, not its rectangular box,
+    because <code>shape-outside</code> redraws the float's wrap
+    boundary from a CSS shape function instead of its bounding box.
+  </p>
+
+  <div class="controls">
+    <label>
+      Shape
+      <div class="shapes" id="shapes">
+        <button data-shape="circle" class="active">Circle</button>
+        <button data-shape="ellipse">Ellipse</button>
+        <button data-shape="triangle">Triangle</button>
+        <button data-shape="wave">Wave</button>
+      </div>
+    </label>
+    <label>
+      Size
+      <input type="range" id="size" min="90" max="220" value="150">
+    </label>
+    <label>
+      Float side
+      <select id="side">
+        <option value="left">Left</option>
+        <option value="right">Right</option>
+      </select>
+    </label>
+  </div>
+
+  <article class="wrap" id="wrap" data-side="left">
+    <div class="shape" id="shape"></div>
+    <p>
+      Before <code>shape-outside</code>, wrapping text around anything
+      but a rectangle meant slicing a paragraph into manually sized
+      spans — one per line — and hand-tuning each width to fake a
+      curve. The property instead lets the browser itself compute,
+      line by line, where the shape's edge actually falls and reflow
+      the text to that boundary, live, as the shape, its size or its
+      position changes. Drag the controls above: the box stays a
+      plain rectangle in the DOM the whole time, only its wrap
+      boundary and its own <code>clip-path</code> outline change, and
+      every line of this paragraph reflows instantly to match. On a
+      triangle the available width shrinks line by line toward the
+      point; on the wave it oscillates in and out with every ripple.
+      It's just CSS — no JavaScript line-measuring, no canvas, no
+      masked overlay image.
+    </p>
+  </article>
+
+  <footer>
+    <code>shape-outside</code> only affects text flow around the
+    float — it draws no visuals itself, which is why this demo also
+    sets a matching <code>clip-path</code> on the same element purely
+    so the shape is visible. The two properties accept the same
+    basic-shape syntax (<code>circle()</code>,
+    <code>ellipse()</code>, <code>polygon()</code>), so one set of
+    coordinates, written once per shape here, drives both at once.
+  </footer>
+</main>
+
+<script>
+  const shape = document.getElementById('shape');
+  const wrap = document.getElementById('wrap');
+  const sizeInput = document.getElementById('size');
+  const sideSelect = document.getElementById('side');
+  const shapeButtons = document.querySelectorAll('#shapes button');
+
+  let currentShape = 'circle';
+
+  function shapeFunction(name, size) {
+    switch (name) {
+      case 'ellipse':
+        return 'ellipse(38% 50% at 50% 50%)';
+      case 'triangle':
+        return 'polygon(50% 0%, 0% 100%, 100% 100%)';
+      case 'wave':
+        return 'polygon(0% 15%, 20% 0%, 35% 20%, 55% 2%, 75% 22%, 100% 5%, 100% 100%, 0% 100%)';
+      default:
+        return 'circle(50% at 50% 50%)';
+    }
+  }
+
+  function applyShape() {
+    const size = sizeInput.value;
+    shape.style.width = `${size}px`;
+    shape.style.height = `${size}px`;
+    const fn = shapeFunction(currentShape, size);
+    shape.style.shapeOutside = fn;
+    shape.style.clipPath = fn;
+  }
+
+  shapeButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      shapeButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentShape = btn.dataset.shape;
+      applyShape();
+    });
+  });
+
+  sizeInput.addEventListener('input', applyShape);
+  sideSelect.addEventListener('change', () => {
+    wrap.dataset.side = sideSelect.value;
+  });
+
+  applyShape();
+</script>
+</body>
+</html>
