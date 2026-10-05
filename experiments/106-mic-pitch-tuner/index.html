@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>106 — Mic Pitch Tuner</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { font-size: 1.15rem; margin: 0 0 0.4rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  button#toggle {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    padding: 0.9rem 1rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button#toggle.listening {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .panel {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+  }
+
+  .note {
+    font-size: 3rem;
+    font-weight: 600;
+    line-height: 1;
+    min-height: 3.5rem;
+  }
+
+  .freq {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 0.35rem;
+    min-height: 1.2rem;
+  }
+
+  .gauge {
+    position: relative;
+    width: 100%;
+    max-width: 280px;
+    margin: 1.5rem auto 0.5rem;
+    height: 90px;
+    overflow: hidden;
+  }
+
+  .gauge .arc {
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--border);
+    border-bottom: none;
+    border-radius: 280px 280px 0 0 / 180px 180px 0 0;
+  }
+
+  .gauge .ticks {
+    position: absolute;
+    inset: 0;
+  }
+  .gauge .ticks span {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    height: 8px;
+    background: var(--muted);
+    transform-origin: bottom center;
+  }
+
+  .gauge .needle {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    height: 80px;
+    background: var(--accent);
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(0deg);
+    transition: transform 0.08s linear;
+    border-radius: 2px;
+  }
+
+  .gauge .needle::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    border-radius: 50%;
+    transform: translateX(-50%);
+  }
+
+  .cents {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .error {
+    font-size: 0.85rem;
+    color: #f87171;
+    text-align: center;
+    min-height: 1.2rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>106 — Mic Pitch Tuner</h1>
+  <p class="intro">
+    Tap start, allow microphone access, then hum or sing a steady note.
+    The fundamental frequency is pulled out of the raw waveform with
+    autocorrelation and matched to the nearest musical note.
+  </p>
+
+  <button id="toggle">Start listening</button>
+
+  <div class="panel">
+    <div class="note" id="note">—</div>
+    <div class="freq" id="freq">&nbsp;</div>
+    <div class="gauge">
+      <div class="arc"></div>
+      <div class="ticks" id="ticks"></div>
+      <div class="needle" id="needle"></div>
+    </div>
+    <div class="cents" id="cents">&nbsp;</div>
+  </div>
+
+  <div class="error" id="error"></div>
+
+  <footer>
+    Autocorrelation shifts a windowed copy of the time-domain buffer
+    against itself and looks for the lag with the strongest
+    correlation — that lag is the waveform's period, so
+    <code>sampleRate / lag</code> gives the frequency directly, no FFT
+    needed. The nearest note comes from
+    <code>69 + 12 · log2(f / 440)</code> rounded to the closest MIDI
+    number, and the needle shows how many cents sharp or flat the
+    actual pitch is from that note's exact frequency.
+  </footer>
+</main>
+
+<script>
+  const toggle = document.getElementById('toggle');
+  const noteEl = document.getElementById('note');
+  const freqEl = document.getElementById('freq');
+  const needle = document.getElementById('needle');
+  const centsEl = document.getElementById('cents');
+  const errorEl = document.getElementById('error');
+  const ticksEl = document.getElementById('ticks');
+
+  const NOTE_STRINGS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+  for (let i = -5; i <= 5; i++) {
+    const tick = document.createElement('span');
+    tick.style.transform = `translateX(-50%) rotate(${i * 9}deg)`;
+    if (i === 0) tick.style.background = 'var(--muted)';
+    ticksEl.appendChild(tick);
+  }
+
+  let audioCtx = null;
+  let analyser = null;
+  let stream = null;
+  let rafId = null;
+  let buffer = null;
+
+  function frequencyFromNoteNumber(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
+  }
+
+  function noteFromPitch(frequency) {
+    return Math.round(12 * (Math.log(frequency / 440) / Math.log(2))) + 69;
+  }
+
+  function centsOffFromPitch(frequency, note) {
+    return Math.floor(1200 * (Math.log(frequency / frequencyFromNoteNumber(note)) / Math.log(2)));
+  }
+
+  // Autocorrelation-based pitch detection on a time-domain Float32 buffer.
+  function autoCorrelate(buf, sampleRate) {
+    const size = buf.length;
+    let rms = 0;
+    for (let i = 0; i < size; i++) rms += buf[i] * buf[i];
+    rms = Math.sqrt(rms / size);
+    if (rms < 0.01) return -1; // too quiet / silence
+
+    let r1 = 0, r2 = size - 1;
+    const threshold = 0.2;
+    for (let i = 0; i < size / 2; i++) {
+      if (Math.abs(buf[i]) < threshold) { r1 = i; break; }
+    }
+    for (let i = 1; i < size / 2; i++) {
+      if (Math.abs(buf[size - i]) < threshold) { r2 = size - i; break; }
+    }
+
+    const trimmed = buf.slice(r1, r2);
+    const n = trimmed.length;
+    const c = new Array(n).fill(0);
+    for (let lag = 0; lag < n; lag++) {
+      for (let i = 0; i < n - lag; i++) {
+        c[lag] += trimmed[i] * trimmed[i + lag];
+      }
+    }
+
+    let d = 0;
+    while (d < n - 1 && c[d] > c[d + 1]) d++;
+    let maxVal = -1, maxPos = -1;
+    for (let i = d; i < n; i++) {
+      if (c[i] > maxVal) { maxVal = c[i]; maxPos = i; }
+    }
+    let lag = maxPos;
+
+    if (lag <= 0) return -1;
+
+    const x1 = c[lag - 1] || 0, x2 = c[lag], x3 = c[lag + 1] || 0;
+    const a = (x1 + x3 - 2 * x2) / 2;
+    const b = (x3 - x1) / 2;
+    if (a) lag -= b / (2 * a);
+
+    return sampleRate / lag;
+  }
+
+  function update() {
+    analyser.getFloatTimeDomainData(buffer);
+    const frequency = autoCorrelate(buffer, audioCtx.sampleRate);
+
+    if (frequency === -1 || !isFinite(frequency) || frequency < 50 || frequency > 2000) {
+      noteEl.textContent = '—';
+      freqEl.innerHTML = '&nbsp;';
+      centsEl.innerHTML = '&nbsp;';
+      needle.style.transform = 'translateX(-50%) rotate(0deg)';
+    } else {
+      const note = noteFromPitch(frequency);
+      const cents = centsOffFromPitch(frequency, note);
+      const name = NOTE_STRINGS[(note + 1200) % 12];
+      const octave = Math.floor(note / 12) - 1;
+
+      noteEl.textContent = `${name}${octave}`;
+      freqEl.textContent = `${frequency.toFixed(1)} Hz`;
+      centsEl.textContent = `${cents > 0 ? '+' : ''}${cents} cents`;
+
+      const clamped = Math.max(-50, Math.min(50, cents));
+      needle.style.transform = `translateX(-50%) rotate(${clamped * 0.9}deg)`;
+    }
+
+    rafId = requestAnimationFrame(update);
+  }
+
+  async function start() {
+    errorEl.textContent = '';
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      errorEl.textContent = 'Microphone access was denied or is unavailable.';
+      return;
+    }
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    buffer = new Float32Array(analyser.fftSize);
+    source.connect(analyser);
+
+    toggle.textContent = 'Stop listening';
+    toggle.classList.add('listening');
+    update();
+  }
+
+  function stop() {
+    if (rafId) cancelAnimationFrame(rafId);
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    if (audioCtx) audioCtx.close();
+    audioCtx = null;
+    analyser = null;
+    stream = null;
+
+    toggle.textContent = 'Start listening';
+    toggle.classList.remove('listening');
+    noteEl.textContent = '—';
+    freqEl.innerHTML = '&nbsp;';
+    centsEl.innerHTML = '&nbsp;';
+    needle.style.transform = 'translateX(-50%) rotate(0deg)';
+  }
+
+  toggle.addEventListener('click', () => {
+    if (audioCtx) stop();
+    else start();
+  });
+</script>
+</body>
+</html>
