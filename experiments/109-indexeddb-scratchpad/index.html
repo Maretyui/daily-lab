@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>109 — IndexedDB Scratchpad</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #a3e635;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { font-size: 1.15rem; margin: 0 0 0.4rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .layout { flex-direction: row; align-items: stretch; }
+    .list-panel { width: 220px; flex: 0 0 220px; }
+    .editor-panel { flex: 1 1 auto; min-width: 0; }
+  }
+
+  .panel {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 1rem;
+    min-width: 0;
+  }
+
+  .list-panel h2, .editor-panel h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 0.75rem;
+  }
+
+  #newNoteBtn {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 0.55rem 0.75rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+    margin-bottom: 0.75rem;
+  }
+  #newNoteBtn:hover { border-color: var(--accent); color: var(--accent); }
+
+  #noteList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  #noteList button {
+    width: 100%;
+    text-align: left;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 0.5rem 0.65rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #noteList button.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .empty-hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .editor-panel textarea {
+    width: 100%;
+    min-height: 220px;
+    resize: vertical;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    padding: 0.75rem;
+  }
+  .editor-panel textarea:disabled {
+    color: var(--muted);
+  }
+
+  .editor-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+  }
+
+  .save-status {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  #deleteBtn {
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: #f87171;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  #deleteBtn:hover { border-color: #f87171; }
+  #deleteBtn:disabled { opacity: 0.4; cursor: default; }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>109 — IndexedDB Scratchpad</h1>
+  <p class="intro">
+    A tiny multi-note scratchpad backed by IndexedDB instead of
+    localStorage — notes survive a reload (try it), and because reads
+    and writes are transactional, nothing is lost even if a write and a
+    page close race each other.
+  </p>
+
+  <div class="layout">
+    <div class="panel list-panel">
+      <h2>Notes</h2>
+      <button id="newNoteBtn">+ New note</button>
+      <ul id="noteList"></ul>
+      <p class="empty-hint" id="emptyHint" hidden>No notes yet — add one above.</p>
+    </div>
+
+    <div class="panel editor-panel">
+      <h2>Editor</h2>
+      <div class="editor-toolbar">
+        <span class="save-status" id="saveStatus">Select or create a note</span>
+        <button id="deleteBtn" disabled>Delete</button>
+      </div>
+      <textarea id="editor" placeholder="Pick a note on the left, or create a new one." disabled></textarea>
+    </div>
+  </div>
+
+  <footer>
+    <code>indexedDB.open()</code> returns immediately with a request
+    object, not a database — every call here waits for its own
+    <code>onsuccess</code>, and every read/write happens inside a
+    <code>db.transaction(['notes'], mode)</code> object store, not
+    directly against the database. Typing debounces a
+    <code>put()</code> by 400ms so every keystroke doesn't open its own
+    transaction, but switching notes or closing the tab flushes
+    immediately first.
+  </footer>
+</main>
+
+<script>
+  const DB_NAME = 'scratchpad-109';
+  const STORE_NAME = 'notes';
+
+  const newNoteBtn = document.getElementById('newNoteBtn');
+  const noteListEl = document.getElementById('noteList');
+  const emptyHint = document.getElementById('emptyHint');
+  const editor = document.getElementById('editor');
+  const saveStatus = document.getElementById('saveStatus');
+  const deleteBtn = document.getElementById('deleteBtn');
+
+  let db = null;
+  let activeId = null;
+  let saveTimer = null;
+
+  function openDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const upgradeDb = request.result;
+        const store = upgradeDb.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('updatedAt', 'updatedAt');
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function getAllNotes() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result.sort((a, b) => b.updatedAt - a.updatedAt));
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function putNote(note) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.put(note);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function deleteNote(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  function titleFor(note) {
+    const firstLine = (note.body || '').split('\n')[0].trim();
+    return firstLine || 'Untitled note';
+  }
+
+  async function renderList() {
+    const notes = await getAllNotes();
+    noteListEl.innerHTML = '';
+    emptyHint.hidden = notes.length > 0;
+
+    notes.forEach((note) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.textContent = titleFor(note);
+      btn.className = note.id === activeId ? 'active' : '';
+      btn.addEventListener('click', () => selectNote(note.id));
+      li.appendChild(btn);
+      noteListEl.appendChild(li);
+    });
+
+    return notes;
+  }
+
+  async function selectNote(id) {
+    flushPendingSave();
+    const notes = await getAllNotes();
+    const note = notes.find((n) => n.id === id);
+    if (!note) return;
+
+    activeId = id;
+    editor.value = note.body;
+    editor.disabled = false;
+    deleteBtn.disabled = false;
+    saveStatus.textContent = 'Saved';
+    await renderList();
+  }
+
+  function flushPendingSave() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      if (activeId !== null) {
+        putNote({ id: activeId, body: editor.value, updatedAt: Date.now() });
+      }
+    }
+  }
+
+  async function createNote() {
+    flushPendingSave();
+    const id = await putNote({ body: '', updatedAt: Date.now() });
+    activeId = id;
+    editor.value = '';
+    editor.disabled = false;
+    deleteBtn.disabled = false;
+    editor.focus();
+    saveStatus.textContent = 'Saved';
+    await renderList();
+  }
+
+  editor.addEventListener('input', () => {
+    if (activeId === null) return;
+    saveStatus.textContent = 'Saving…';
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      saveTimer = null;
+      await putNote({ id: activeId, body: editor.value, updatedAt: Date.now() });
+      saveStatus.textContent = 'Saved';
+      await renderList();
+    }, 400);
+  });
+
+  deleteBtn.addEventListener('click', async () => {
+    if (activeId === null) return;
+    flushPendingSave();
+    await deleteNote(activeId);
+    activeId = null;
+    editor.value = '';
+    editor.disabled = true;
+    deleteBtn.disabled = true;
+    saveStatus.textContent = 'Select or create a note';
+    await renderList();
+  });
+
+  newNoteBtn.addEventListener('click', createNote);
+
+  window.addEventListener('beforeunload', flushPendingSave);
+
+  (async () => {
+    db = await openDb();
+    const notes = await renderList();
+    if (notes.length > 0) selectNote(notes[0].id);
+  })();
+</script>
+</body>
+</html>
