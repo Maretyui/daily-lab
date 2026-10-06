@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>108 — Gamepad Tester</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #22d3ee;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { font-size: 1.15rem; margin: 0 0 0.4rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .status {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 0.9rem 1rem;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  .status.connected { border-color: var(--accent); color: var(--accent); }
+
+  .panel {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 1.25rem;
+  }
+
+  .panel h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 0.9rem;
+  }
+
+  .buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .btn-cell {
+    aspect-ratio: 1;
+    min-width: 0;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    color: var(--muted);
+    transition: background 0.05s linear, color 0.05s linear, border-color 0.05s linear;
+  }
+  .btn-cell.pressed {
+    background: var(--accent);
+    color: #04202a;
+    border-color: var(--accent);
+  }
+
+  .sticks {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.25rem;
+  }
+
+  .stick {
+    width: 120px;
+    max-width: 100%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  .stick .dot {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: transform 0.05s linear;
+  }
+
+  .stick-label {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+  }
+
+  .stick-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>108 — Gamepad Tester</h1>
+  <p class="intro">
+    Connect a controller (USB or Bluetooth) and press any button to wake
+    it up — browsers only report a gamepad's existence after it sees its
+    first input. Every button and both sticks update live below, polled
+    on each animation frame since the Gamepad API has no "changed" event
+    of its own.
+  </p>
+
+  <div class="status" id="status">No gamepad detected yet. Press a button on a connected controller.</div>
+
+  <div class="panel">
+    <h2>Buttons</h2>
+    <div class="buttons" id="buttons"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Sticks</h2>
+    <div class="sticks">
+      <div class="stick-wrap">
+        <div class="stick" id="stickLeft"><div class="dot"></div></div>
+        <div class="stick-label">Left</div>
+      </div>
+      <div class="stick-wrap">
+        <div class="stick" id="stickRight"><div class="dot"></div></div>
+        <div class="stick-label">Right</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <code>navigator.getGamepads()</code> returns a fresh snapshot on every
+    call instead of a live object, and only inside a loop you drive
+    yourself — there's no <code>gamepadinput</code> event, so this page
+    re-reads it on every <code>requestAnimationFrame</code> tick while a
+    pad is connected. Button values are read as <code>button.value</code>
+    (0–1) rather than just <code>.pressed</code>, so analog triggers
+    (L2/R2) fade in gradually instead of snapping straight to full.
+  </footer>
+</main>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const buttonsEl = document.getElementById('buttons');
+  const stickLeft = document.getElementById('stickLeft');
+  const stickRight = document.getElementById('stickRight');
+  const dotLeft = stickLeft.querySelector('.dot');
+  const dotRight = stickRight.querySelector('.dot');
+
+  let rafId = null;
+  let activeIndex = null;
+  let cells = [];
+
+  function buildCells(count) {
+    buttonsEl.innerHTML = '';
+    cells = [];
+    for (let i = 0; i < count; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'btn-cell';
+      cell.textContent = i;
+      buttonsEl.appendChild(cell);
+      cells.push(cell);
+    }
+  }
+
+  function moveDot(dot, container, x, y) {
+    // Deadzone - raw stick axes rest around ±0.05-0.1 even released, so
+    // without this the dot would jitter near center instead of sitting still.
+    const dx = Math.abs(x) < 0.08 ? 0 : x;
+    const dy = Math.abs(y) < 0.08 ? 0 : y;
+    const radius = container.clientWidth / 2 - 10;
+    dot.style.transform = `translate(calc(-50% + ${dx * radius}px), calc(-50% + ${dy * radius}px))`;
+  }
+
+  function update() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const pad = activeIndex !== null ? pads[activeIndex] : null;
+
+    if (pad) {
+      if (cells.length !== pad.buttons.length) buildCells(pad.buttons.length);
+
+      pad.buttons.forEach((button, i) => {
+        const cell = cells[i];
+        if (!cell) return;
+        const pressed = button.value > 0.05;
+        cell.classList.toggle('pressed', pressed);
+        cell.style.opacity = pressed ? String(Math.max(0.5, button.value)) : '';
+      });
+
+      moveDot(dotLeft, stickLeft, pad.axes[0] || 0, pad.axes[1] || 0);
+      moveDot(dotRight, stickRight, pad.axes[2] || 0, pad.axes[3] || 0);
+    }
+
+    rafId = requestAnimationFrame(update);
+  }
+
+  function connect(pad) {
+    activeIndex = pad.index;
+    statusEl.textContent = `Connected: ${pad.id}`;
+    statusEl.classList.add('connected');
+    buildCells(pad.buttons.length);
+    if (!rafId) update();
+  }
+
+  function disconnect() {
+    activeIndex = null;
+    statusEl.textContent = 'No gamepad detected yet. Press a button on a connected controller.';
+    statusEl.classList.remove('connected');
+    buttonsEl.innerHTML = '';
+    cells = [];
+  }
+
+  window.addEventListener('gamepadconnected', (e) => connect(e.gamepad));
+  window.addEventListener('gamepaddisconnected', (e) => {
+    if (e.gamepad.index === activeIndex) disconnect();
+  });
+
+  // Some browsers (notably Firefox) populate getGamepads() on load without
+  // ever firing gamepadconnected if a pad was already on before the page
+  // loaded - this catches that case instead of waiting forever for an event.
+  const existing = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const pad of existing) {
+    if (pad) { connect(pad); break; }
+  }
+</script>
+</body>
+</html>
