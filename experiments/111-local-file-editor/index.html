@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>111 — Local File Editor</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .toolbar button {
+    flex: 1 1 auto;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .toolbar button:hover { border-color: var(--accent); }
+  .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  textarea {
+    width: 100%;
+    min-height: 16rem;
+    resize: vertical;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    padding: 0.9rem;
+    font: 0.9rem/1.5 "SF Mono", "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  .status {
+    font-size: 0.85rem;
+    color: var(--muted);
+    word-break: break-word;
+  }
+  .status.dirty { color: var(--accent); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>111 — Local File Editor</h1>
+  <p class="intro">
+    Open a real <code>.txt</code> file from disk, edit it, and save your
+    changes straight back into that same file — no download link, no
+    re-picking a save location each time.
+  </p>
+
+  <div class="toolbar">
+    <button type="button" id="openBtn">Open file…</button>
+    <button type="button" id="saveBtn" disabled>Save</button>
+    <button type="button" id="newBtn">New file…</button>
+  </div>
+
+  <textarea id="editor" placeholder="Open or create a file to start editing…" disabled></textarea>
+
+  <p class="status" id="status">Checking browser support…</p>
+
+  <footer>
+    Uses the File System Access API — <code>showOpenFilePicker()</code>
+    and <code>showSaveFilePicker()</code> hand back a
+    <code>FileSystemFileHandle</code> that a <code>createWritable()</code>
+    stream can write to directly, so "Save" updates the original file in
+    place instead of producing a new download each time. Where the API
+    isn't available (Firefox, Safari, most mobile browsers) the editor
+    stays disabled with an explanation instead of silently doing nothing.
+  </footer>
+</main>
+
+<script>
+  const openBtn = document.getElementById('openBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const newBtn = document.getElementById('newBtn');
+  const editor = document.getElementById('editor');
+  const status = document.getElementById('status');
+
+  let fileHandle = null;
+  let savedContent = '';
+
+  const supported = 'showOpenFilePicker' in window && 'showSaveFilePicker' in window;
+
+  function markDirty() {
+    const dirty = editor.value !== savedContent;
+    status.classList.toggle('dirty', dirty);
+    if (fileHandle) {
+      status.textContent = `${fileHandle.name}${dirty ? ' — unsaved changes' : ' — saved'}`;
+    }
+  }
+
+  async function openFile() {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'Text files', accept: { 'text/plain': ['.txt', '.md'] } }],
+      });
+      fileHandle = handle;
+      const file = await handle.getFile();
+      const text = await file.text();
+      editor.value = text;
+      savedContent = text;
+      editor.disabled = false;
+      saveBtn.disabled = false;
+      markDirty();
+    } catch (err) {
+      if (err.name !== 'AbortError') status.textContent = `Couldn't open that file: ${err.message}`;
+    }
+  }
+
+  async function newFile() {
+    try {
+      const handle = await window.showSaveFilePicker({
+        types: [{ description: 'Text files', accept: { 'text/plain': ['.txt'] } }],
+      });
+      fileHandle = handle;
+      editor.value = '';
+      savedContent = '';
+      editor.disabled = false;
+      saveBtn.disabled = false;
+      markDirty();
+    } catch (err) {
+      if (err.name !== 'AbortError') status.textContent = `Couldn't create that file: ${err.message}`;
+    }
+  }
+
+  async function saveFile() {
+    if (!fileHandle) return;
+    try {
+      const writable = await fileHandle.createWritable();
+      await writable.write(editor.value);
+      await writable.close();
+      savedContent = editor.value;
+      markDirty();
+    } catch (err) {
+      status.textContent = `Couldn't save: ${err.message}`;
+    }
+  }
+
+  if (supported) {
+    status.textContent = 'No file open yet.';
+    openBtn.addEventListener('click', openFile);
+    newBtn.addEventListener('click', newFile);
+    saveBtn.addEventListener('click', saveFile);
+    editor.addEventListener('input', markDirty);
+  } else {
+    status.textContent = 'This browser doesn’t support the File System Access API (try desktop Chrome or Edge).';
+    openBtn.disabled = true;
+    newBtn.disabled = true;
+  }
+</script>
+</body>
+</html>
