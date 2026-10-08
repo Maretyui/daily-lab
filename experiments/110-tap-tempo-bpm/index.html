@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>110 — Tap Tempo</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .pad {
+    width: 100%;
+    aspect-ratio: 1.6;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    user-select: none;
+    display: grid;
+    place-items: center;
+    gap: 0.25rem;
+    transition: transform 0.06s ease, border-color 0.15s ease;
+  }
+  .pad:active { transform: scale(0.98); }
+  .pad.pulse { border-color: var(--accent); }
+
+  .bpm {
+    font-size: 3rem;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .bpm-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .row {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .row button.reset {
+    flex: 1 1 auto;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .row button.reset:hover { border-color: var(--accent); color: var(--text); }
+
+  .meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>110 — Tap Tempo</h1>
+  <p class="intro">
+    Tap along to a beat (or click/press the pad) and the BPM is derived
+    live from the gaps between taps, not from a fixed metronome. A run
+    resets itself automatically after 2 seconds of silence.
+  </p>
+
+  <button type="button" class="pad" id="pad">
+    <span class="bpm" id="bpmValue">—</span>
+    <span class="bpm-label" id="bpmLabel">tap to start</span>
+  </button>
+
+  <div class="row">
+    <button type="button" class="reset" id="resetBtn">Reset</button>
+  </div>
+
+  <p class="meta" id="meta"></p>
+
+  <footer>
+    Each tap's timestamp comes from <code>performance.now()</code>. The BPM
+    shown is <code>60000 / average-gap-of-the-last-8-taps</code>, so one
+    slightly early or late tap gets smoothed out instead of swinging the
+    reading wildly. A tap gap over 2000ms is treated as "stopped", not as
+    a very slow tempo, and the run clears itself.
+  </footer>
+</main>
+
+<script>
+  const pad = document.getElementById('pad');
+  const bpmValue = document.getElementById('bpmValue');
+  const bpmLabel = document.getElementById('bpmLabel');
+  const meta = document.getElementById('meta');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const MAX_GAP_MS = 2000;
+  const WINDOW = 8;
+  let taps = [];
+  let idleTimer = null;
+
+  function reset() {
+    taps = [];
+    bpmValue.textContent = '—';
+    bpmLabel.textContent = 'tap to start';
+    meta.textContent = '';
+    pad.classList.remove('pulse');
+    clearTimeout(idleTimer);
+  }
+
+  function tap() {
+    const now = performance.now();
+    if (taps.length && now - taps[taps.length - 1] > MAX_GAP_MS) {
+      taps = [];
+    }
+    taps.push(now);
+    if (taps.length > WINDOW) taps.shift();
+
+    pad.classList.add('pulse');
+    requestAnimationFrame(() => {
+      setTimeout(() => pad.classList.remove('pulse'), 90);
+    });
+
+    if (taps.length < 2) {
+      bpmLabel.textContent = 'keep tapping…';
+      meta.textContent = '';
+    } else {
+      const gaps = [];
+      for (let i = 1; i < taps.length; i++) gaps.push(taps[i] - taps[i - 1]);
+      const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      const bpm = 60000 / avgGap;
+      bpmValue.textContent = bpm.toFixed(1);
+      bpmLabel.textContent = 'beats per minute';
+      meta.textContent = `averaging the last ${gaps.length} gap${gaps.length === 1 ? '' : 's'}`;
+    }
+
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(reset, MAX_GAP_MS);
+  }
+
+  pad.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    tap();
+  });
+  pad.addEventListener('keydown', (e) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      tap();
+    }
+  });
+  resetBtn.addEventListener('click', reset);
+</script>
+</body>
+</html>
