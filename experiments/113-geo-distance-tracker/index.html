@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>113 — Geo Distance Tracker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+  .stat {
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 12px;
+    padding: 0.9rem;
+    text-align: center;
+  }
+  .stat .value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+  }
+
+  canvas {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1.3;
+    display: block;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+
+  .row {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .row button {
+    flex: 1 1 auto;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .row button#startBtn { background: var(--accent); color: #1a1304; border-color: var(--accent); }
+  .row button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .meta.warn { color: var(--accent); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>113 — Geo Distance Tracker</h1>
+  <p class="intro">
+    Tracks real movement with the Geolocation API's <code>watchPosition</code>,
+    summing great-circle distance between consecutive fixes with the
+    haversine formula and plotting the walked path on a canvas — no map
+    tiles, just the raw lat/lon trail rescaled to fit.
+  </p>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="value" id="distValue">0 m</div>
+      <div class="label">distance</div>
+    </div>
+    <div class="stat">
+      <div class="value" id="fixValue">0</div>
+      <div class="label">GPS fixes</div>
+    </div>
+  </div>
+
+  <canvas id="pathCanvas" width="600" height="460"></canvas>
+
+  <div class="row">
+    <button type="button" id="startBtn">Start tracking</button>
+    <button type="button" id="resetBtn" disabled>Reset</button>
+  </div>
+
+  <p class="meta" id="meta">Needs location permission — works best outdoors with a clear GPS fix.</p>
+
+  <footer>
+    Each new fix is only accepted if <code>coords.accuracy</code> is under
+    50m, so a noisy indoor Wi-Fi-based position can't fake a sprint. The
+    canvas path is just the raw lat/lon points linearly rescaled to the
+    canvas box — it has no projection and will distort at low latitudes
+    over long distances, same as any flat approximation of a sphere.
+  </footer>
+</main>
+
+<script>
+  const distValue = document.getElementById('distValue');
+  const fixValue = document.getElementById('fixValue');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const meta = document.getElementById('meta');
+  const canvas = document.getElementById('pathCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const MAX_ACCURACY_M = 50;
+  let watchId = null;
+  let points = [];
+  let totalMeters = 0;
+
+  function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  function formatDistance(m) {
+    return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${m.toFixed(0)} m`;
+  }
+
+  function draw() {
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    if (points.length < 2) {
+      ctx.fillStyle = '#8b93a7';
+      ctx.font = '14px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('Path will appear here once you start moving', w / 2, h / 2);
+      return;
+    }
+
+    const lats = points.map((p) => p.lat);
+    const lons = points.map((p) => p.lon);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+    const pad = 30;
+    const spanLat = Math.max(maxLat - minLat, 1e-6);
+    const spanLon = Math.max(maxLon - minLon, 1e-6);
+
+    function project(lat, lon) {
+      const x = pad + ((lon - minLon) / spanLon) * (w - pad * 2);
+      const y = h - pad - ((lat - minLat) / spanLat) * (h - pad * 2);
+      return [x, y];
+    }
+
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      const [x, y] = project(p.lat, p.lon);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    const [sx, sy] = project(points[0].lat, points[0].lon);
+    ctx.fillStyle = '#8b93a7';
+    ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill();
+
+    const last = points[points.length - 1];
+    const [ex, ey] = project(last.lat, last.lon);
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function onPosition(pos) {
+    const { latitude, longitude, accuracy } = pos.coords;
+    if (accuracy > MAX_ACCURACY_M) {
+      meta.textContent = `Skipped a low-accuracy fix (±${accuracy.toFixed(0)}m)`;
+      meta.classList.add('warn');
+      return;
+    }
+    meta.classList.remove('warn');
+
+    if (points.length) {
+      const prev = points[points.length - 1];
+      totalMeters += haversine(prev.lat, prev.lon, latitude, longitude);
+    }
+    points.push({ lat: latitude, lon: longitude });
+
+    distValue.textContent = formatDistance(totalMeters);
+    fixValue.textContent = String(points.length);
+    meta.textContent = `Last fix accuracy ±${accuracy.toFixed(0)}m`;
+    draw();
+  }
+
+  function onError(err) {
+    meta.textContent = `Location error: ${err.message}`;
+    meta.classList.add('warn');
+    stop();
+  }
+
+  function start() {
+    if (!('geolocation' in navigator)) {
+      meta.textContent = 'Geolocation API not available in this browser.';
+      meta.classList.add('warn');
+      return;
+    }
+    watchId = navigator.geolocation.watchPosition(onPosition, onError, {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 15000,
+    });
+    startBtn.textContent = 'Stop tracking';
+    resetBtn.disabled = false;
+  }
+
+  function stop() {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    startBtn.textContent = 'Start tracking';
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (watchId === null) start(); else stop();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    points = [];
+    totalMeters = 0;
+    distValue.textContent = '0 m';
+    fixValue.textContent = '0';
+    meta.textContent = 'Reset — waiting for the next fix.';
+    meta.classList.remove('warn');
+    draw();
+  });
+
+  draw();
+</script>
+</body>
+</html>
