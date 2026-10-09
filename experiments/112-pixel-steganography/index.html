@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>112 — Pixel Steganography</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .tabs button {
+    flex: 1 1 auto;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .tabs button.active {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .panel { display: grid; gap: 0.9rem; }
+  .panel[hidden] { display: none; }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .dropzone {
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    padding: 1.25rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .dropzone.drag { border-color: var(--accent); color: var(--text); }
+  .dropzone input { display: none; }
+
+  canvas {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 5rem;
+    resize: vertical;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  button.action {
+    border: 1px solid var(--border);
+    background: var(--accent);
+    color: #1a1304;
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.action:disabled {
+    background: var(--card);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+
+  a.download {
+    display: block;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.85rem;
+    color: var(--text);
+    text-decoration: none;
+  }
+  a.download:hover { border-color: var(--accent); }
+
+  .meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .meta.warn { color: var(--accent); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>112 — Pixel Steganography</h1>
+  <p class="intro">
+    Hides a text message inside a photo by rewriting the least significant
+    bit of each red, green and blue channel — a change too small to see,
+    but enough to carry real data back out again.
+  </p>
+
+  <div class="tabs">
+    <button type="button" class="active" id="tabHide">Hide</button>
+    <button type="button" id="tabReveal">Reveal</button>
+  </div>
+
+  <section class="panel" id="hidePanel">
+    <div>
+      <label for="hideFile">Carrier image</label>
+      <div class="dropzone" id="hideDrop">
+        Tap to choose an image, or drop one here
+        <input type="file" accept="image/*" id="hideFile">
+      </div>
+    </div>
+    <canvas id="hideCanvas" hidden></canvas>
+    <div>
+      <label for="message">Secret message</label>
+      <textarea id="message" placeholder="Written in invisible ink…"></textarea>
+    </div>
+    <p class="meta" id="hideMeta"></p>
+    <button type="button" class="action" id="encodeBtn" disabled>Hide message in image</button>
+    <a class="download" id="downloadLink" hidden download="steganography-output.png">Download the encoded PNG</a>
+  </section>
+
+  <section class="panel" id="revealPanel" hidden>
+    <div>
+      <label for="revealFile">Encoded image</label>
+      <div class="dropzone" id="revealDrop">
+        Tap to choose an image, or drop one here
+        <input type="file" accept="image/*" id="revealFile">
+      </div>
+    </div>
+    <canvas id="revealCanvas" hidden></canvas>
+    <p class="meta" id="revealMeta">Extracted message will appear below.</p>
+    <textarea id="revealOutput" readonly placeholder="Nothing decoded yet"></textarea>
+  </section>
+
+  <footer>
+    The message is written as a 32-bit length header followed by the UTF-8
+    bytes, one bit per color channel, skipping alpha. A photo with
+    <code>width × height × 3</code> bits of room can hold roughly that many
+    characters divided by 8. Re-saving the PNG as a JPEG anywhere in between
+    will destroy the hidden bits — lossy compression doesn't preserve exact
+    pixel values.
+  </footer>
+</main>
+
+<script>
+  const tabHide = document.getElementById('tabHide');
+  const tabReveal = document.getElementById('tabReveal');
+  const hidePanel = document.getElementById('hidePanel');
+  const revealPanel = document.getElementById('revealPanel');
+
+  tabHide.addEventListener('click', () => {
+    tabHide.classList.add('active');
+    tabReveal.classList.remove('active');
+    hidePanel.hidden = false;
+    revealPanel.hidden = true;
+  });
+  tabReveal.addEventListener('click', () => {
+    tabReveal.classList.add('active');
+    tabHide.classList.remove('active');
+    revealPanel.hidden = false;
+    hidePanel.hidden = true;
+  });
+
+  function setupDropzone(zone, input, onFile) {
+    zone.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      if (input.files[0]) onFile(input.files[0]);
+    });
+    ['dragover', 'dragleave', 'drop'].forEach((type) => {
+      zone.addEventListener(type, (e) => {
+        e.preventDefault();
+        zone.classList.toggle('drag', type === 'dragover');
+        if (type === 'drop' && e.dataTransfer.files[0]) {
+          onFile(e.dataTransfer.files[0]);
+        }
+      });
+    });
+  }
+
+  function loadImageToCanvas(file, canvas) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.hidden = false;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(img.src);
+        resolve(ctx);
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  // ---- Hide ----
+  const hideDrop = document.getElementById('hideDrop');
+  const hideFile = document.getElementById('hideFile');
+  const hideCanvas = document.getElementById('hideCanvas');
+  const hideMeta = document.getElementById('hideMeta');
+  const encodeBtn = document.getElementById('encodeBtn');
+  const downloadLink = document.getElementById('downloadLink');
+  const messageEl = document.getElementById('message');
+
+  let hideCtx = null;
+
+  setupDropzone(hideDrop, hideFile, async (file) => {
+    hideCtx = await loadImageToCanvas(file, hideCanvas);
+    downloadLink.hidden = true;
+    updateCapacity();
+  });
+
+  function capacityChars() {
+    if (!hideCtx) return 0;
+    const bits = hideCanvas.width * hideCanvas.height * 3 - 32;
+    return Math.max(0, Math.floor(bits / 8));
+  }
+
+  function updateCapacity() {
+    const cap = capacityChars();
+    const len = new TextEncoder().encode(messageEl.value).length;
+    hideMeta.textContent = `${len} / ${cap} bytes of carrier capacity used`;
+    hideMeta.classList.toggle('warn', len > cap);
+    encodeBtn.disabled = !hideCtx || len === 0 || len > cap;
+  }
+  messageEl.addEventListener('input', updateCapacity);
+
+  encodeBtn.addEventListener('click', () => {
+    const imageData = hideCtx.getImageData(0, 0, hideCanvas.width, hideCanvas.height);
+    const data = imageData.data;
+    const bytes = new TextEncoder().encode(messageEl.value);
+
+    const bits = [];
+    for (let i = 31; i >= 0; i--) bits.push((bytes.length >> i) & 1);
+    for (const byte of bytes) {
+      for (let i = 7; i >= 0; i--) bits.push((byte >> i) & 1);
+    }
+
+    let bitIndex = 0;
+    for (let p = 0; p < data.length && bitIndex < bits.length; p += 4) {
+      for (let c = 0; c < 3 && bitIndex < bits.length; c++) {
+        data[p + c] = (data[p + c] & 0xfe) | bits[bitIndex];
+        bitIndex++;
+      }
+    }
+
+    hideCtx.putImageData(imageData, 0, 0);
+    hideCanvas.toBlob((blob) => {
+      downloadLink.href = URL.createObjectURL(blob);
+      downloadLink.hidden = false;
+    }, 'image/png');
+  });
+
+  // ---- Reveal ----
+  const revealDrop = document.getElementById('revealDrop');
+  const revealFile = document.getElementById('revealFile');
+  const revealCanvas = document.getElementById('revealCanvas');
+  const revealMeta = document.getElementById('revealMeta');
+  const revealOutput = document.getElementById('revealOutput');
+
+  setupDropzone(revealDrop, revealFile, async (file) => {
+    const ctx = await loadImageToCanvas(file, revealCanvas);
+    const imageData = ctx.getImageData(0, 0, revealCanvas.width, revealCanvas.height);
+    const data = imageData.data;
+
+    let lenBits = [];
+    let p = 0;
+    outer:
+    for (; p < data.length; p += 4) {
+      for (let c = 0; c < 3; c++) {
+        lenBits.push(data[p + c] & 1);
+        if (lenBits.length === 32) break outer;
+      }
+    }
+
+    let length = 0;
+    for (const bit of lenBits) length = (length << 1) | bit;
+
+    if (length <= 0 || length > (data.length / 4) * 3 / 8) {
+      revealMeta.textContent = 'No readable message header found in this image.';
+      revealOutput.value = '';
+      return;
+    }
+
+    const byteBits = [];
+    const totalBitsNeeded = length * 8;
+    let collected = 0;
+    let skip = 32;
+    outer2:
+    for (p = 0; p < data.length; p += 4) {
+      for (let c = 0; c < 3; c++) {
+        if (skip > 0) { skip--; continue; }
+        byteBits.push(data[p + c] & 1);
+        collected++;
+        if (collected === totalBitsNeeded) break outer2;
+      }
+    }
+
+    const out = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+      let byte = 0;
+      for (let b = 0; b < 8; b++) byte = (byte << 1) | byteBits[i * 8 + b];
+      out[i] = byte;
+    }
+
+    try {
+      revealOutput.value = new TextDecoder('utf-8', { fatal: true }).decode(out);
+      revealMeta.textContent = `Decoded ${length} bytes.`;
+    } catch {
+      revealOutput.value = '';
+      revealMeta.textContent = 'Header decoded but the bytes are not valid UTF-8 — this image probably has no hidden message.';
+    }
+  });
+</script>
+</body>
+</html>
