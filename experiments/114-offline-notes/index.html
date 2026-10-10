@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>114 — Offline-First Notes</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+    --ok: #4ade80;
+    --warn: #f87171;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 10px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.85rem;
+  }
+  .status .dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--ok);
+    flex: none;
+  }
+  .status.offline .dot { background: var(--warn); }
+
+  textarea {
+    width: 100%;
+    min-height: 8rem;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 0.9rem;
+    font: inherit;
+    font-size: 0.95rem;
+    resize: vertical;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+
+  .row {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .row button {
+    flex: 1 1 auto;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .row button#saveBtn { background: var(--accent); color: #1a1304; border-color: var(--accent); }
+
+  .meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>114 — Offline-First Notes</h1>
+  <p class="intro">
+    A service worker caches this page's own shell on first load and
+    answers every later same-origin request straight from that cache,
+    so reopening the page with no network at all still works. The note
+    itself isn't kept in <code>localStorage</code> either — it's stored
+    as a synthetic <code>Response</code> inside the Cache API under a
+    made-up request key, the same mechanism the shell cache uses.
+  </p>
+
+  <div class="status" id="status">
+    <span class="dot"></span>
+    <span id="statusText">Checking connection…</span>
+  </div>
+
+  <textarea id="note" placeholder="Write something, then Save. Try reloading with your network off afterwards."></textarea>
+
+  <div class="row">
+    <button type="button" id="saveBtn">Save note</button>
+    <button type="button" id="clearBtn">Clear</button>
+  </div>
+
+  <p class="meta" id="meta">No service worker registered yet.</p>
+
+  <footer>
+    <code>caches.open()</code> + <code>cache.put(new Request(key), new Response(text))</code>
+    works as a tiny key/value store without IndexedDB, and the same
+    cache the service worker uses for the app shell holds it — both are
+    just name-and-bytes pairs to the Cache API, whether the name is a
+    real URL or not.
+  </footer>
+</main>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const statusText = document.getElementById('statusText');
+  const noteEl = document.getElementById('note');
+  const metaEl = document.getElementById('meta');
+  const saveBtn = document.getElementById('saveBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+  const NOTES_CACHE = 'offline-notes-store-v1';
+  const NOTE_KEY = new Request('https://offline-notes.local/current-note');
+
+  function updateOnlineStatus() {
+    const online = navigator.onLine;
+    statusEl.classList.toggle('offline', !online);
+    statusText.textContent = online ? 'Online' : 'Offline — serving from cache';
+  }
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  updateOnlineStatus();
+
+  async function loadNote() {
+    if (!('caches' in window)) {
+      metaEl.textContent = 'Cache API not available in this browser.';
+      return;
+    }
+    const cache = await caches.open(NOTES_CACHE);
+    const match = await cache.match(NOTE_KEY);
+    if (match) {
+      noteEl.value = await match.text();
+      metaEl.textContent = 'Loaded the last saved note from the Cache API.';
+    }
+  }
+
+  async function saveNote() {
+    const cache = await caches.open(NOTES_CACHE);
+    await cache.put(NOTE_KEY, new Response(noteEl.value));
+    metaEl.textContent = `Saved ${new Date().toLocaleTimeString()} — available even if the page reloads offline.`;
+  }
+
+  async function clearNote() {
+    const cache = await caches.open(NOTES_CACHE);
+    await cache.delete(NOTE_KEY);
+    noteEl.value = '';
+    metaEl.textContent = 'Note cleared from the cache.';
+  }
+
+  saveBtn.addEventListener('click', saveNote);
+  clearBtn.addEventListener('click', clearNote);
+  loadNote();
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      metaEl.textContent = 'Service worker registered — the page shell is now cached for offline reloads.';
+      reg.addEventListener('updatefound', () => {
+        metaEl.textContent = 'Service worker updating…';
+      });
+    }).catch((err) => {
+      metaEl.textContent = `Service worker registration failed: ${err.message}`;
+    });
+  } else {
+    metaEl.textContent = 'Service workers are not supported in this browser.';
+  }
+</script>
+</body>
+</html>
