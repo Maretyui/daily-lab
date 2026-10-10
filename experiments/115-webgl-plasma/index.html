@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>115 — WebGL Plasma</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  canvas {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1.3;
+    display: block;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    touch-action: none;
+  }
+
+  .meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>115 — WebGL Plasma</h1>
+  <p class="intro">
+    A raw <code>WebGLRenderingContext</code> — no Three.js, no canvas 2D —
+    runs a single full-screen fragment shader that layers sine waves into
+    a shifting plasma field. Dragging or tapping feeds the pointer
+    position into the shader as a uniform, which bends the pattern around
+    it in real time entirely on the GPU.
+  </p>
+
+  <canvas id="glCanvas" width="600" height="460"></canvas>
+
+  <p class="meta" id="meta">Drag or tap anywhere on the canvas.</p>
+
+  <footer>
+    The vertex shader just draws one full-screen triangle; all the actual
+    motion happens per-pixel in the fragment shader by summing
+    <code>sin()</code> waves of <code>uTime</code> and the distance to
+    <code>uPointer</code>, then mapping that sum through
+    <code>cos()</code> at three phase-shifted offsets to get an RGB
+    color — the classic plasma-demo trick, just on a modern GPU pipeline
+    instead of a software raster loop.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('glCanvas');
+  const meta = document.getElementById('meta');
+  const gl = canvas.getContext('webgl');
+
+  if (!gl) {
+    meta.textContent = 'WebGL is not available in this browser.';
+  } else {
+    const vertexSrc = `
+      attribute vec2 aPosition;
+      void main() {
+        gl_Position = vec4(aPosition, 0.0, 1.0);
+      }
+    `;
+
+    const fragmentSrc = `
+      precision mediump float;
+      uniform float uTime;
+      uniform vec2 uResolution;
+      uniform vec2 uPointer;
+
+      void main() {
+        float scale = min(uResolution.x, uResolution.y);
+        vec2 p = (gl_FragCoord.xy - 0.5 * uResolution) / scale;
+        vec2 pointer = (uPointer - 0.5 * uResolution) / scale;
+        float d = length(p - pointer);
+
+        float v = sin((p.x * 10.0) + uTime)
+          + sin((p.y * 10.0) + uTime * 1.3)
+          + sin((p.x + p.y) * 10.0 + uTime * 0.7)
+          + sin(d * 20.0 - uTime * 3.0);
+
+        vec3 col = 0.5 + 0.5 * cos(6.28318 * (v * 0.15 + vec3(0.0, 0.33, 0.67)));
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `;
+
+    function compile(type, src) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(shader));
+      }
+      return shader;
+    }
+
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexSrc));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentSrc));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(program));
+    }
+    gl.useProgram(program);
+
+    // One full-screen triangle, big enough to cover the clip-space square.
+    const positions = new Float32Array([-1, -1, 3, -1, -1, 3]);
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+    const aPosition = gl.getAttribLocation(program, 'aPosition');
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+    const uTime = gl.getUniformLocation(program, 'uTime');
+    const uResolution = gl.getUniformLocation(program, 'uResolution');
+    const uPointer = gl.getUniformLocation(program, 'uPointer');
+
+    let pointer = { x: canvas.width / 2, y: canvas.height / 2 };
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+
+    function setPointerFromEvent(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+      pointer = { x, y: canvas.height - y };
+    }
+
+    let dragging = false;
+    canvas.addEventListener('pointerdown', (evt) => {
+      dragging = true;
+      setPointerFromEvent(evt);
+    });
+    canvas.addEventListener('pointermove', (evt) => {
+      if (dragging) setPointerFromEvent(evt);
+    });
+    window.addEventListener('pointerup', () => { dragging = false; });
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    function render(timeMs) {
+      gl.uniform1f(uTime, timeMs * 0.001);
+      gl.uniform2f(uResolution, canvas.width, canvas.height);
+      gl.uniform2f(uPointer, pointer.x, pointer.y);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+  }
+</script>
+</body>
+</html>
