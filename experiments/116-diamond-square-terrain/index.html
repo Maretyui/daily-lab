@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>116 — Diamond-Square Terrain</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  canvas {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    display: block;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    image-rendering: pixelated;
+  }
+
+  .controls {
+    display: grid;
+    gap: 0.9rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+  }
+
+  .control-row {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .control-row .label-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  input[type="range"] {
+    width: 100%;
+  }
+
+  button {
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #1b2130;
+    color: var(--text);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>116 — Diamond-Square Terrain</h1>
+  <p class="intro">
+    A midpoint-displacement heightmap: start with four random corners,
+    then repeatedly fill in square and diamond midpoints as the average
+    of their neighbors plus shrinking random noise, halving the grid
+    step each pass until every cell has a height.
+  </p>
+
+  <canvas id="terrainCanvas" width="129" height="129"></canvas>
+
+  <div class="controls">
+    <div class="control-row">
+      <div class="label-line">
+        <span>Rauheit</span>
+        <span id="roughnessValue"></span>
+      </div>
+      <input type="range" id="roughnessSlider" min="0.3" max="1.3" step="0.05" value="0.75">
+    </div>
+    <button id="regenerateBtn" type="button">Neu generieren</button>
+  </div>
+
+  <footer>
+    Heights get normalized to 0–1 after generation, then mapped to a
+    water/sand/grass/rock/snow palette by threshold. The
+    <strong>Rauheit</strong> slider controls how fast the random
+    offset's scale decays each pass (<code>scale *= 2^-roughness</code>)
+    — low values smooth into rolling hills, high values stay jagged all
+    the way down to single-pixel noise.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('terrainCanvas');
+  const ctx = canvas.getContext('2d');
+  const roughnessSlider = document.getElementById('roughnessSlider');
+  const roughnessValue = document.getElementById('roughnessValue');
+  const regenerateBtn = document.getElementById('regenerateBtn');
+
+  const SIZE = 129; // 2^7 + 1, required by the diamond-square subdivision
+
+  function diamondSquare(size, roughness) {
+    const map = new Float32Array(size * size);
+    const get = (x, y) => map[y * size + x];
+    const set = (x, y, v) => { map[y * size + x] = v; };
+
+    set(0, 0, Math.random());
+    set(size - 1, 0, Math.random());
+    set(0, size - 1, Math.random());
+    set(size - 1, size - 1, Math.random());
+
+    let step = size - 1;
+    let scale = 1;
+
+    while (step > 1) {
+      const half = step / 2;
+
+      // Square step: center of each cell = average of its 4 corners + noise.
+      for (let y = half; y < size; y += step) {
+        for (let x = half; x < size; x += step) {
+          const avg = (
+            get(x - half, y - half) +
+            get(x + half, y - half) +
+            get(x - half, y + half) +
+            get(x + half, y + half)
+          ) / 4;
+          set(x, y, avg + (Math.random() * 2 - 1) * scale);
+        }
+      }
+
+      // Diamond step: edge midpoints = average of whichever of their up to
+      // 4 neighbors exist (edges of the grid only have 3) + noise.
+      for (let y = 0; y < size; y += half) {
+        for (let x = (y / half) % 2 === 0 ? half : 0; x < size; x += step) {
+          let sum = 0, count = 0;
+          if (x - half >= 0) { sum += get(x - half, y); count++; }
+          if (x + half < size) { sum += get(x + half, y); count++; }
+          if (y - half >= 0) { sum += get(x, y - half); count++; }
+          if (y + half < size) { sum += get(x, y + half); count++; }
+          set(x, y, sum / count + (Math.random() * 2 - 1) * scale);
+        }
+      }
+
+      step = half;
+      // Halving step naturally shrinks detail; `roughness` additionally
+      // controls how fast the noise *amplitude* decays alongside it.
+      scale *= Math.pow(2, -roughness);
+    }
+
+    return map;
+  }
+
+  // Index 0 = deep water ... last = snow cap.
+  const PALETTE = [
+    [21, 56, 112],   // deep water
+    [36, 92, 158],   // shallow water
+    [194, 178, 128], // sand
+    [86, 140, 74],   // grass
+    [60, 100, 56],   // forest
+    [110, 104, 96],  // rock
+    [230, 230, 235], // snow
+  ];
+
+  function colorFor(h) {
+    const idx = Math.min(PALETTE.length - 1, Math.floor(h * PALETTE.length));
+    return PALETTE[idx];
+  }
+
+  function render() {
+    const roughness = parseFloat(roughnessSlider.value);
+    const map = diamondSquare(SIZE, roughness);
+
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < map.length; i++) {
+      if (map[i] < min) min = map[i];
+      if (map[i] > max) max = map[i];
+    }
+    const range = max - min || 1;
+
+    const imageData = ctx.createImageData(SIZE, SIZE);
+    for (let i = 0; i < map.length; i++) {
+      const h = (map[i] - min) / range;
+      const [r, g, b] = colorFor(h);
+      imageData.data[i * 4] = r;
+      imageData.data[i * 4 + 1] = g;
+      imageData.data[i * 4 + 2] = b;
+      imageData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  roughnessSlider.addEventListener('input', () => {
+    roughnessValue.textContent = roughnessSlider.value;
+    render();
+  });
+  regenerateBtn.addEventListener('click', render);
+
+  roughnessValue.textContent = roughnessSlider.value;
+  render();
+</script>
+</body>
+</html>
