@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>117 — Audio File Visualizer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #f59e0b;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .file-row label {
+    display: inline-block;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #1b2130;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .file-row label:hover { border-color: var(--accent); }
+  .file-row input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+  }
+
+  audio {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  canvas {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 2;
+    display: block;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+
+  p.meta {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    margin: 0;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>117 — Audio File Visualizer</h1>
+  <p class="intro">
+    Pick any local audio file and it plays through a real
+    <code>AnalyserNode</code> — the bars below are its live frequency
+    spectrum, not a canned animation, so they react to whatever you
+    actually load.
+  </p>
+
+  <div class="file-row">
+    <label for="fileInput">Audiodatei wählen</label>
+    <input type="file" id="fileInput" accept="audio/*">
+  </div>
+
+  <audio id="audioEl" controls></audio>
+
+  <canvas id="vizCanvas" width="600" height="300"></canvas>
+
+  <p class="meta" id="meta">Noch keine Datei geladen.</p>
+
+  <footer>
+    <code>createMediaElementSource(audio)</code> taps the element's
+    output into an <code>AnalyserNode</code>, which has to be routed
+    back to <code>audioContext.destination</code> explicitly — tapping
+    it otherwise silently replaces normal playback instead of just
+    listening in on it. The <code>AudioContext</code> itself is only
+    created on the first file pick/play, since browsers block it from
+    starting before a user gesture.
+  </footer>
+</main>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const audioEl = document.getElementById('audioEl');
+  const canvas = document.getElementById('vizCanvas');
+  const ctx = canvas.getContext('2d');
+  const meta = document.getElementById('meta');
+
+  let audioCtx = null;
+  let analyser = null;
+  let dataArray = null;
+  let sourceConnected = false;
+  let rafId = null;
+
+  function ensureAudioGraph() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    // createMediaElementSource can only be called once per <audio> element -
+    // reusing the same element for a second file must not call it again.
+    const source = audioCtx.createMediaElementSource(audioEl);
+    source.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    sourceConnected = true;
+  }
+
+  function draw() {
+    rafId = requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(dataArray);
+
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const barCount = dataArray.length;
+    const barWidth = w / barCount;
+    for (let i = 0; i < barCount; i++) {
+      const value = dataArray[i] / 255;
+      const barHeight = value * h;
+      const hue = 190 - value * 140;
+      ctx.fillStyle = `hsl(${hue}, 80%, 55%)`;
+      ctx.fillRect(i * barWidth, h - barHeight, Math.max(1, barWidth - 1), barHeight);
+    }
+  }
+
+  function stopDrawing() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  }
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+
+    ensureAudioGraph();
+    audioEl.src = URL.createObjectURL(file);
+    audioEl.play();
+    meta.textContent = file.name;
+  });
+
+  audioEl.addEventListener('play', () => {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (rafId === null && sourceConnected) draw();
+  });
+  audioEl.addEventListener('pause', stopDrawing);
+  audioEl.addEventListener('ended', stopDrawing);
+</script>
+</body>
+</html>
