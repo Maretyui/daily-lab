@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>119 — Keyboard Heatmap</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    max-width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.1rem;
+    padding: 2rem 1.25rem;
+    text-align: center;
+    width: min(100%, 520px);
+  }
+
+  h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
+
+  textarea#input {
+    width: 100%;
+    min-height: 90px;
+    resize: vertical;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid #1f2530;
+    border-radius: 12px;
+    padding: 0.75rem;
+    font: inherit;
+    font-size: 0.95rem;
+  }
+  textarea#input:focus { outline: 2px solid var(--accent); }
+
+  .keyboard {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .row {
+    display: flex;
+    gap: 0.35rem;
+    width: 100%;
+  }
+
+  .key {
+    flex: 1 1 0;
+    min-width: 0;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--text);
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid #1f2530;
+    transition: background 0.2s ease;
+  }
+
+  .key.space {
+    flex: 1 1 0;
+    aspect-ratio: auto;
+    height: 2.2rem;
+  }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .legend .bar {
+    flex: 1;
+    height: 10px;
+    border-radius: 6px;
+    background: linear-gradient(to right, #151a24, var(--accent));
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  button#reset {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid #1f2530;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button#reset:hover { border-color: var(--accent); }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 460px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Keyboard Heatmap — type below, watch which keys light up the most</h1>
+  <textarea id="input" placeholder="Tippe hier irgendetwas…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+  <div class="keyboard" id="keyboard"></div>
+  <div class="legend">
+    <span>selten</span>
+    <div class="bar"></div>
+    <span>häufig</span>
+  </div>
+  <div class="actions">
+    <button id="reset">Zurücksetzen</button>
+  </div>
+  <p class="hint">Jeder Tastendruck im Textfeld zählt pro Zeichen, nicht pro physischer Taste — funktioniert deshalb identisch mit einer Bildschirmtastatur auf dem Handy.</p>
+</main>
+<script>
+  const input = document.getElementById('input');
+  const keyboardEl = document.getElementById('keyboard');
+  const resetBtn = document.getElementById('reset');
+
+  const rows = [
+    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+    ['Z', 'X', 'C', 'V', 'B', 'N', 'M'],
+  ];
+
+  const counts = {};
+  const keyEls = {};
+
+  function buildKeyboard() {
+    rows.forEach((row) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'row';
+      row.forEach((letter) => {
+        const keyEl = document.createElement('div');
+        keyEl.className = 'key';
+        keyEl.textContent = letter;
+        keyEls[letter] = keyEl;
+        counts[letter] = 0;
+        rowEl.appendChild(keyEl);
+      });
+      keyboardEl.appendChild(rowEl);
+    });
+
+    const spaceRow = document.createElement('div');
+    spaceRow.className = 'row';
+    const spaceKey = document.createElement('div');
+    spaceKey.className = 'key space';
+    spaceKey.textContent = 'Leertaste';
+    keyEls[' '] = spaceKey;
+    counts[' '] = 0;
+    spaceRow.appendChild(spaceKey);
+    keyboardEl.appendChild(spaceRow);
+  }
+
+  function colorFor(ratio) {
+    // ratio 0..1 -> interpolate card color to accent teal
+    const from = { r: 0x15, g: 0x1a, b: 0x24 };
+    const to = { r: 0x14, g: 0xb8, b: 0xa6 };
+    const r = Math.round(from.r + (to.r - from.r) * ratio);
+    const g = Math.round(from.g + (to.g - from.g) * ratio);
+    const b = Math.round(from.b + (to.b - from.b) * ratio);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function render() {
+    const max = Math.max(1, ...Object.values(counts));
+    Object.entries(counts).forEach(([letter, count]) => {
+      const el = keyEls[letter];
+      if (!el) return;
+      const ratio = count / max;
+      el.style.background = colorFor(ratio);
+      el.style.color = ratio > 0.55 ? '#0b0e14' : 'var(--text)';
+    });
+  }
+
+  function handleInput() {
+    const text = input.value.toUpperCase();
+    Object.keys(counts).forEach((k) => (counts[k] = 0));
+    for (const char of text) {
+      if (char === ' ') {
+        counts[' ']++;
+      } else if (counts[char] !== undefined) {
+        counts[char]++;
+      }
+    }
+    render();
+  }
+
+  resetBtn.addEventListener('click', () => {
+    input.value = '';
+    handleInput();
+    input.focus();
+  });
+
+  buildKeyboard();
+  render();
+  input.addEventListener('input', handleInput);
+</script>
+</body>
+</html>
