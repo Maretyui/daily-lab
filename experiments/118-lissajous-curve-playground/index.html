@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>118 — Lissajous Curve Playground</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 2;
+  }
+  a.back:hover { color: var(--text); }
+
+  main {
+    max-width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    text-align: center;
+    width: min(100%, 480px);
+  }
+
+  h1 { font-size: 1.1rem; margin: 0; color: var(--muted); font-weight: 500; }
+
+  canvas#plot {
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    border-radius: 16px;
+    background: var(--card);
+  }
+
+  .controls {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    text-align: left;
+  }
+
+  .control label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .control label span.val {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  input[type="range"] {
+    width: 100%;
+  }
+
+  code.eq {
+    font-size: 0.75rem;
+    color: var(--muted);
+    background: #0f1420;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+  }
+
+  p.hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    max-width: 440px;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>Lissajous Curve Playground — tune the two frequencies and watch the trace redraw live</h1>
+  <canvas id="plot" width="420" height="420"></canvas>
+  <code class="eq" id="eqLabel">x = sin(3t), y = sin(2t)</code>
+  <div class="controls">
+    <div class="control">
+      <label for="freqA">Frequenz A <span class="val" id="freqAVal">3</span></label>
+      <input type="range" id="freqA" min="1" max="12" step="1" value="3">
+    </div>
+    <div class="control">
+      <label for="freqB">Frequenz B <span class="val" id="freqBVal">2</span></label>
+      <input type="range" id="freqB" min="1" max="12" step="1" value="2">
+    </div>
+    <div class="control">
+      <label for="phase">Phasenversatz δ <span class="val" id="phaseVal">0.00</span></label>
+      <input type="range" id="phase" min="0" max="628" step="1" value="0">
+    </div>
+  </div>
+  <p class="hint">Jede ganzzahlige Kombination aus A und B erzeugt eine eigene geschlossene Figur; der Phasenregler dreht und verformt sie, ohne die Frequenzen zu ändern.</p>
+</main>
+<script>
+  const canvas = document.getElementById('plot');
+  const ctx = canvas.getContext('2d');
+  const freqAInput = document.getElementById('freqA');
+  const freqBInput = document.getElementById('freqB');
+  const phaseInput = document.getElementById('phase');
+  const freqAVal = document.getElementById('freqAVal');
+  const freqBVal = document.getElementById('freqBVal');
+  const phaseVal = document.getElementById('phaseVal');
+  const eqLabel = document.getElementById('eqLabel');
+
+  const size = canvas.width;
+  const radius = size / 2 - 24;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  let t = 0;
+  const trail = [];
+  const maxTrailPoints = 2000;
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function params() {
+    const a = Number(freqAInput.value);
+    const b = Number(freqBInput.value);
+    const delta = Number(phaseInput.value) / 100;
+    return { a, b, delta };
+  }
+
+  function point(time, a, b, delta) {
+    const x = cx + radius * Math.sin(a * time + delta);
+    const y = cy + radius * Math.sin(b * time);
+    return { x, y };
+  }
+
+  function updateLabels() {
+    const { a, b, delta } = params();
+    freqAVal.textContent = a;
+    freqBVal.textContent = b;
+    phaseVal.textContent = delta.toFixed(2);
+    eqLabel.textContent = `x = sin(${a}t + ${delta.toFixed(2)}), y = sin(${b}t)`;
+  }
+
+  function rebuildStaticTrail() {
+    // full period length for integer frequency ratios is 2*PI
+    trail.length = 0;
+    const { a, b, delta } = params();
+    const steps = 1000;
+    for (let i = 0; i <= steps; i++) {
+      const time = (i / steps) * Math.PI * 2;
+      trail.push(point(time, a, b, delta));
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, size, size);
+
+    ctx.strokeStyle = '#1f2530';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#14b8a6';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    trail.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+
+    if (!reduceMotion && trail.length) {
+      const headIndex = Math.floor((t / (Math.PI * 2)) * (trail.length - 1)) % trail.length;
+      const head = trail[Math.max(0, headIndex)];
+      ctx.fillStyle = '#e6e9ef';
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function tick() {
+    if (!reduceMotion) {
+      t += 0.012;
+      if (t > Math.PI * 2) t -= Math.PI * 2;
+      draw();
+      requestAnimationFrame(tick);
+    }
+  }
+
+  [freqAInput, freqBInput, phaseInput].forEach((input) => {
+    input.addEventListener('input', () => {
+      updateLabels();
+      rebuildStaticTrail();
+      if (reduceMotion) draw();
+    });
+  });
+
+  updateLabels();
+  rebuildStaticTrail();
+  draw();
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>
