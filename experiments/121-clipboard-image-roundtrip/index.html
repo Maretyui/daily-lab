@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>121 — Clipboard Image Round-Trip</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .panels {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card);
+    padding: 1rem;
+  }
+
+  .panel h2 {
+    font-size: 0.85rem;
+    margin: 0 0 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  canvas, img.preview {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    background: var(--bg);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .preview-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 160px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 1rem;
+  }
+
+  .hint {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0.6rem 0 0;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+  }
+
+  button {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  .status {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    min-height: 1.2em;
+  }
+
+  footer {
+    margin-top: 1.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>121 — Clipboard Image Round-Trip</h1>
+  <p class="intro">
+    A generated swatch goes onto the system clipboard as an actual image
+    (not a data URL pasted as text), then gets read back from the
+    clipboard into the preview on the right — the same two steps you'd use
+    to move a screenshot between apps. Tap the swatch to regenerate it.
+  </p>
+
+  <div class="panels">
+    <div class="panel">
+      <h2>Source</h2>
+      <canvas id="swatch" width="400" height="200"></canvas>
+      <p class="hint">Tap to generate a new pattern.</p>
+    </div>
+    <div class="panel">
+      <h2>Pasted from clipboard</h2>
+      <div class="preview-empty" id="previewEmpty">Nothing pasted yet.</div>
+      <img class="preview" id="previewImg" alt="Image read back from the clipboard" hidden>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="copyBtn" type="button">Copy image</button>
+    <button id="pasteBtn" type="button">Paste image</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <footer id="footerNote">
+    <code>navigator.clipboard.write()</code> takes a
+    <code>ClipboardItem</code> built from the canvas's own
+    <code>toBlob()</code> output, and <code>navigator.clipboard.read()</code>
+    hands back the same kind of blob to decode with
+    <code>createImageBitmap()</code> — both skip ever turning the pixels
+    into a text data URL. Writing needs no permission prompt from a click
+    handler; reading may ask for clipboard-read permission the first time.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('swatch');
+  const ctx = canvas.getContext('2d');
+  const copyBtn = document.getElementById('copyBtn');
+  const pasteBtn = document.getElementById('pasteBtn');
+  const statusEl = document.getElementById('status');
+  const previewImg = document.getElementById('previewImg');
+  const previewEmpty = document.getElementById('previewEmpty');
+
+  function randomColor() {
+    const h = Math.floor(Math.random() * 360);
+    return `hsl(${h}, 70%, 55%)`;
+  }
+
+  function paintSwatch() {
+    const w = canvas.width;
+    const h = canvas.height;
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, randomColor());
+    grad.addColorStop(1, randomColor());
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = 0; i < 24; i++) {
+      const r = 6 + Math.random() * 18;
+      ctx.beginPath();
+      ctx.arc(Math.random() * w, Math.random() * h, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  canvas.addEventListener('pointerdown', paintSwatch);
+  paintSwatch();
+
+  const canWrite = !!(navigator.clipboard && window.ClipboardItem && navigator.clipboard.write);
+  const canRead = !!(navigator.clipboard && navigator.clipboard.read);
+
+  if (!canWrite) {
+    copyBtn.disabled = true;
+    copyBtn.textContent = 'Copy (unsupported)';
+  }
+  if (!canRead) {
+    pasteBtn.disabled = true;
+    pasteBtn.textContent = 'Paste (unsupported)';
+  }
+  if (!canWrite && !canRead) {
+    footerNote.textContent =
+      'The async Clipboard API for images is unavailable in this browser — ' +
+      'both buttons above are disabled.';
+  }
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      statusEl.textContent = 'Swatch copied — paste it into any app, or click "Paste image" below.';
+    } catch (err) {
+      statusEl.textContent = `Copy failed: ${err.message}`;
+    }
+  });
+
+  pasteBtn.addEventListener('click', async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      let imageBlob = null;
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (type) {
+          imageBlob = await item.getType(type);
+          break;
+        }
+      }
+      if (!imageBlob) {
+        statusEl.textContent = 'No image found on the clipboard — copy an image first.';
+        return;
+      }
+      const url = URL.createObjectURL(imageBlob);
+      previewImg.onload = () => URL.revokeObjectURL(url);
+      previewImg.src = url;
+      previewImg.hidden = false;
+      previewEmpty.hidden = true;
+      statusEl.textContent = 'Pasted from clipboard.';
+    } catch (err) {
+      statusEl.textContent = `Paste failed: ${err.message}`;
+    }
+  });
+</script>
+</body>
+</html>
