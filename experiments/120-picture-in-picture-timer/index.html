@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>120 — Picture-in-Picture Timer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1.5rem 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card);
+  }
+
+  .stage.floating {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  }
+
+  .time {
+    font-variant-numeric: tabular-nums;
+    font-size: 2.6rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .status {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    min-height: 1.2em;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  button {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: default; }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #06211d;
+  }
+  button.primary.running {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+  }
+
+  #popBtn { grid-column: 1 / -1; }
+
+  footer {
+    margin-top: 1.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>120 — Picture-in-Picture Timer</h1>
+  <p class="intro">
+    A plain stopwatch that also works when the tab is in the background. "Pop out"
+    moves the live timer and its controls into a real floating always-on-top window
+    via the Document Picture-in-Picture API, so it stays visible while you switch
+    tabs or apps. Everything below still works as a normal on-page stopwatch if
+    that API isn't there.
+  </p>
+
+  <div class="stage" id="stage">
+    <div class="time" id="time">00:00.0</div>
+    <div class="status" id="status">Ready.</div>
+    <div class="controls">
+      <button class="primary" id="toggleBtn" type="button">Start</button>
+      <button id="resetBtn" type="button">Reset</button>
+      <button id="popBtn" type="button">Pop out</button>
+    </div>
+  </div>
+
+  <footer id="footerNote">
+    Uses <code>window.documentPictureInPicture.requestWindow()</code>, which hands
+    back a second real <code>Window</code> with its own document — elements get
+    moved into it (not cloned), so the exact same buttons and listeners keep
+    working inside the floating window. Closing that window or clicking "Pop out"
+    again moves everything back here. Support is desktop Chrome/Edge only for now;
+    the stopwatch itself runs everywhere, the button just disables when the API is
+    missing.
+  </footer>
+</main>
+
+<script>
+  const stage = document.getElementById('stage');
+  const timeEl = document.getElementById('time');
+  const statusEl = document.getElementById('status');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const popBtn = document.getElementById('popBtn');
+  const footerNote = document.getElementById('footerNote');
+
+  let running = false;
+  let elapsedMs = 0;
+  let startedAt = 0;
+  let rafId = null;
+  let pipWindow = null;
+
+  function formatTime(ms) {
+    const totalTenths = Math.floor(ms / 100);
+    const tenths = totalTenths % 10;
+    const totalSeconds = Math.floor(totalTenths / 10);
+    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    return `${minutes}:${seconds}.${tenths}`;
+  }
+
+  function tick() {
+    timeEl.textContent = formatTime(elapsedMs + (performance.now() - startedAt));
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function start() {
+    running = true;
+    startedAt = performance.now();
+    toggleBtn.textContent = 'Pause';
+    toggleBtn.classList.add('running');
+    statusEl.textContent = pipWindow ? 'Running — floating in its own window.' : 'Running.';
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function pause() {
+    running = false;
+    elapsedMs += performance.now() - startedAt;
+    cancelAnimationFrame(rafId);
+    toggleBtn.textContent = 'Start';
+    toggleBtn.classList.remove('running');
+    statusEl.textContent = 'Paused.';
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    if (running) pause(); else start();
+  });
+
+  resetBtn.addEventListener('click', () => {
+    cancelAnimationFrame(rafId);
+    running = false;
+    elapsedMs = 0;
+    timeEl.textContent = formatTime(0);
+    toggleBtn.textContent = 'Start';
+    toggleBtn.classList.remove('running');
+    statusEl.textContent = pipWindow ? 'Reset — still floating.' : 'Ready.';
+  });
+
+  if (!('documentPictureInPicture' in window)) {
+    popBtn.disabled = true;
+    popBtn.textContent = 'Pop out (unsupported)';
+    footerNote.textContent =
+      'documentPictureInPicture is unavailable in this browser, so "Pop out" is ' +
+      'disabled — the stopwatch above still runs normally without it.';
+  } else {
+    popBtn.addEventListener('click', async () => {
+      if (pipWindow) {
+        pipWindow.close();
+        return;
+      }
+
+      pipWindow = await window.documentPictureInPicture.requestWindow({
+        width: 280,
+        height: 220,
+      });
+
+      // Copy this page's styles so the moved controls keep their look.
+      [...document.styleSheets].forEach((sheet) => {
+        try {
+          const css = [...sheet.cssRules].map((rule) => rule.cssText).join('\n');
+          const style = pipWindow.document.createElement('style');
+          style.textContent = css;
+          pipWindow.document.head.appendChild(style);
+        } catch (err) {
+          // Cross-origin sheets can't be read; none exist on this page.
+        }
+      });
+      pipWindow.document.body.style.margin = '0';
+      pipWindow.document.body.style.background = 'var(--bg)';
+      pipWindow.document.body.appendChild(stage);
+      stage.classList.add('floating');
+      popBtn.textContent = 'Back to page';
+      statusEl.textContent = running
+        ? 'Running — floating in its own window.'
+        : 'Floating in its own window.';
+
+      pipWindow.addEventListener('pagehide', () => {
+        document.querySelector('main').insertBefore(stage, footerNote);
+        stage.classList.remove('floating');
+        popBtn.textContent = 'Pop out';
+        statusEl.textContent = running ? 'Running.' : (elapsedMs ? 'Paused.' : 'Ready.');
+        pipWindow = null;
+      });
+    });
+  }
+</script>
+</body>
+</html>
