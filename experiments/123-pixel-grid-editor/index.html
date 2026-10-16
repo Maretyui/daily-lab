@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>123 — Pixel Grid Editor</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .board {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card);
+    padding: 1rem;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    image-rendering: pixelated;
+    background:
+      conic-gradient(#20262f 90deg, transparent 90deg 180deg, #20262f 180deg 270deg, transparent 270deg) top left / 16px 16px repeat,
+      #171c26;
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  .palette {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .swatch {
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    padding: 0;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .swatch.active {
+    border-color: var(--text);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .swatch.eraser {
+    background:
+      linear-gradient(45deg, transparent 46%, var(--muted) 46%, var(--muted) 54%, transparent 54%),
+      linear-gradient(-45deg, transparent 46%, var(--muted) 46%, var(--muted) 54%, transparent 54%),
+      var(--card);
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1.5rem;
+  }
+
+  button.action {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.action:hover { border-color: var(--accent); }
+
+  .status {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    min-height: 1.2em;
+  }
+
+  footer {
+    margin-top: 1.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>123 — Pixel Grid Editor</h1>
+  <p class="intro">
+    A 20×20 tile grid you paint by tapping or dragging a finger/pointer
+    across it — each tile is filled as a flat-shaded square, not a free-hand
+    stroke, so the result stays crisp at any zoom. Export it as a real PNG.
+  </p>
+
+  <div class="board">
+    <canvas id="grid" width="400" height="400" role="img" aria-label="Pixel art drawing grid"></canvas>
+  </div>
+
+  <div class="palette" id="palette"></div>
+
+  <div class="controls">
+    <button class="action" id="clearBtn" type="button">Clear grid</button>
+    <button class="action" id="downloadBtn" type="button">Download PNG</button>
+  </div>
+  <div class="status" id="status"></div>
+
+  <footer>
+    The canvas is drawn at a fixed <code>20×20</code> tile resolution
+    internally; pointer coordinates are converted from CSS pixels back to
+    canvas space with <code>canvas.width / rect.width</code> before picking
+    a tile, so painting lines up correctly whether the board is shown at
+    its natural size or scaled down to fit a narrow screen.
+    <code>pointerdown</code>/<code>pointermove</code> (not HTML5 drag-and-drop)
+    drive the painting, so it works the same with a mouse, a stylus, or a
+    finger.
+  </footer>
+</main>
+
+<script>
+  const GRID = 20;
+  const canvas = document.getElementById('grid');
+  const ctx = canvas.getContext('2d');
+  const cell = canvas.width / GRID;
+  const paletteEl = document.getElementById('palette');
+  const clearBtn = document.getElementById('clearBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const statusEl = document.getElementById('status');
+
+  const colors = [
+    '#f8fafc', '#e6e9ef', '#94a3b8', '#334155',
+    '#ef4444', '#f97316', '#f59e0b', '#eab308',
+    '#84cc16', '#22c55e', '#14b8a6', '#06b6d4',
+    '#3b82f6', '#6366f1', '#a855f7', '#ec4899',
+  ];
+
+  const tiles = new Array(GRID * GRID).fill(null);
+  let activeColor = colors[9];
+  let painting = false;
+
+  function buildPalette() {
+    colors.forEach((color) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'swatch';
+      btn.style.background = color;
+      btn.setAttribute('aria-label', `Pick color ${color}`);
+      btn.addEventListener('click', () => setActive(color, btn));
+      paletteEl.appendChild(btn);
+      if (color === activeColor) btn.classList.add('active');
+    });
+    const eraser = document.createElement('button');
+    eraser.type = 'button';
+    eraser.className = 'swatch eraser';
+    eraser.setAttribute('aria-label', 'Eraser');
+    eraser.addEventListener('click', () => setActive(null, eraser));
+    paletteEl.appendChild(eraser);
+  }
+
+  function setActive(color, btn) {
+    activeColor = color;
+    for (const el of paletteEl.children) el.classList.remove('active');
+    btn.classList.add('active');
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < tiles.length; i++) {
+      const color = tiles[i];
+      if (!color) continue;
+      const x = (i % GRID) * cell;
+      const y = Math.floor(i / GRID) * cell;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, cell, cell);
+    }
+  }
+
+  function tileFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    const col = Math.min(GRID - 1, Math.max(0, Math.floor(x / cell)));
+    const row = Math.min(GRID - 1, Math.max(0, Math.floor(y / cell)));
+    return row * GRID + col;
+  }
+
+  function paintAt(e) {
+    const idx = tileFromEvent(e);
+    if (tiles[idx] === activeColor) return;
+    tiles[idx] = activeColor;
+    render();
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    painting = true;
+    canvas.setPointerCapture(e.pointerId);
+    paintAt(e);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!painting) return;
+    paintAt(e);
+  });
+  canvas.addEventListener('pointerup', () => { painting = false; });
+  canvas.addEventListener('pointercancel', () => { painting = false; });
+
+  clearBtn.addEventListener('click', () => {
+    tiles.fill(null);
+    render();
+    statusEl.textContent = 'Grid cleared.';
+  });
+
+  downloadBtn.addEventListener('click', async () => {
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pixel-art.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      statusEl.textContent = 'Downloaded as pixel-art.png.';
+    } catch (err) {
+      statusEl.textContent = `Download failed: ${err.message}`;
+    }
+  });
+
+  buildPalette();
+  render();
+</script>
+</body>
+</html>
