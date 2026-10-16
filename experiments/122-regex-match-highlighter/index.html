@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>122 — Regex Match Highlighter</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.4rem;
+  }
+
+  .pattern-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .pattern-row .slashes {
+    display: flex;
+    align-items: center;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 1rem;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.7rem 0.8rem;
+    font: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.95rem;
+  }
+  input[type="text"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  input.flags {
+    width: 5.5rem;
+    flex: none;
+    text-align: center;
+  }
+
+  .flag-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin: -0.2rem 0 1.25rem;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.8rem;
+    font: inherit;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    resize: vertical;
+  }
+  textarea:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .output {
+    margin-top: 1.5rem;
+  }
+
+  .output h2 {
+    font-size: 0.8rem;
+    margin: 0 0 0.6rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .highlighted {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card);
+    padding: 0.8rem;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .highlighted mark {
+    background: var(--accent);
+    color: #04201c;
+    border-radius: 3px;
+    padding: 0 1px;
+  }
+
+  .highlighted mark.group {
+    outline: 1px dashed #fbbf24;
+    outline-offset: 1px;
+  }
+
+  .status {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    min-height: 1.2em;
+  }
+  .status.error { color: var(--danger); }
+  .status.ok { color: var(--muted); }
+
+  .groups {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .groups ol {
+    margin: 0.4rem 0 0;
+    padding-left: 1.2rem;
+  }
+  .groups code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+    color: var(--text);
+  }
+
+  footer {
+    margin-top: 2rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>122 — Regex Match Highlighter</h1>
+  <p class="intro">
+    Type a pattern and some text; every match gets highlighted live as you
+    type, with capture groups outlined separately. Nothing leaves the page —
+    it's just <code>RegExp</code> and <code>matchAll()</code> re-run on each
+    keystroke.
+  </p>
+
+  <label for="pattern">Pattern</label>
+  <div class="pattern-row">
+    <span class="slashes">/</span>
+    <input type="text" id="pattern" value="\b\w+@\w+\.\w+\b" autocomplete="off" spellcheck="false">
+    <span class="slashes">/</span>
+    <input type="text" id="flags" class="flags" value="g" autocomplete="off" spellcheck="false">
+  </div>
+  <p class="flag-label">Flags — try <code>g</code>, <code>i</code>, <code>m</code>, <code>s</code>, <code>u</code></p>
+
+  <label for="sample">Test string</label>
+  <textarea id="sample" spellcheck="false">Reach the team at hello@example.com or support@example.org before Friday. Internal pings go to oncall@internal.example.net.</textarea>
+
+  <p class="status" id="status"></p>
+
+  <div class="output">
+    <h2>Highlighted</h2>
+    <div class="highlighted" id="highlighted" aria-live="polite"></div>
+  </div>
+
+  <div class="groups" id="groups" hidden>
+    <strong>Capture groups in first match</strong>
+    <ol id="groupsList"></ol>
+  </div>
+
+  <footer>
+    Matches are found with <code>pattern.matchAll(text)</code> (the
+    <code>g</code> flag is added automatically under the hood if you forget
+    it, since <code>matchAll</code> requires it) and rendered by splicing
+    <code>&lt;mark&gt;</code> elements around each match's index/length —
+    text content only, no <code>innerHTML</code> from user input, so nothing
+    typed here can inject markup.
+  </footer>
+</main>
+
+<script>
+  const patternEl = document.getElementById('pattern');
+  const flagsEl = document.getElementById('flags');
+  const sampleEl = document.getElementById('sample');
+  const statusEl = document.getElementById('status');
+  const highlightedEl = document.getElementById('highlighted');
+  const groupsEl = document.getElementById('groups');
+  const groupsListEl = document.getElementById('groupsList');
+
+  function render() {
+    const patternSrc = patternEl.value;
+    let flags = flagsEl.value.replace(/[^gimsuy]/g, '');
+    if (!flags.includes('g')) flags += 'g';
+    const text = sampleEl.value;
+
+    highlightedEl.textContent = '';
+    groupsEl.hidden = true;
+    groupsListEl.textContent = '';
+
+    if (!patternSrc) {
+      highlightedEl.textContent = text;
+      statusEl.textContent = 'Empty pattern — nothing to match.';
+      statusEl.className = 'status ok';
+      return;
+    }
+
+    let re;
+    try {
+      re = new RegExp(patternSrc, flags);
+    } catch (err) {
+      highlightedEl.textContent = text;
+      statusEl.textContent = `Invalid pattern: ${err.message}`;
+      statusEl.className = 'status error';
+      return;
+    }
+
+    let matches;
+    try {
+      matches = [...text.matchAll(re)];
+    } catch (err) {
+      highlightedEl.textContent = text;
+      statusEl.textContent = `Match failed: ${err.message}`;
+      statusEl.className = 'status error';
+      return;
+    }
+
+    if (matches.length === 0) {
+      highlightedEl.textContent = text;
+      statusEl.textContent = 'No matches.';
+      statusEl.className = 'status ok';
+      return;
+    }
+
+    // matchAll's own iterator already advances past zero-length matches
+    // (e.g. /a*/g) by one character internally, so matches arrive in
+    // increasing, non-overlapping order with no extra bookkeeping needed
+    // here beyond slicing between them.
+    let cursor = 0;
+    const frag = document.createDocumentFragment();
+    for (const m of matches) {
+      const start = m.index;
+      const end = start + m[0].length;
+      frag.appendChild(document.createTextNode(text.slice(cursor, start)));
+      const mark = document.createElement('mark');
+      mark.textContent = m[0] || '​'; // zero-width space keeps empty matches visible
+      frag.appendChild(mark);
+      cursor = end;
+    }
+    frag.appendChild(document.createTextNode(text.slice(cursor)));
+    highlightedEl.appendChild(frag);
+
+    statusEl.textContent = `${matches.length} match${matches.length === 1 ? '' : 'es'}.`;
+    statusEl.className = 'status ok';
+
+    const first = matches[0];
+    if (first.length > 1) {
+      groupsEl.hidden = false;
+      for (let i = 1; i < first.length; i++) {
+        const li = document.createElement('li');
+        const code = document.createElement('code');
+        code.textContent = first[i] === undefined ? '(undefined)' : first[i];
+        li.appendChild(code);
+        groupsListEl.appendChild(li);
+      }
+    }
+  }
+
+  patternEl.addEventListener('input', render);
+  flagsEl.addEventListener('input', render);
+  sampleEl.addEventListener('input', render);
+  render();
+</script>
+</body>
+</html>
