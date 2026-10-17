@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>125 — Times Table Cardioid</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .board {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card);
+    padding: 1rem;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    background: #0e1420;
+  }
+
+  .field {
+    margin-top: 1rem;
+  }
+  .field label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+  .field label span.value {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  input[type="range"] {
+    width: 100%;
+    touch-action: manipulation;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+  }
+
+  button.action {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.action:hover { border-color: var(--accent); }
+  button.action[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+  footer {
+    margin-top: 1.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>125 — Times Table Cardioid</h1>
+  <p class="intro">
+    <code>N</code> points sit evenly around a circle. Point <code>i</code>
+    draws a chord to point <code>(i × k) mod N</code> for every
+    <code>i</code>. Integer <code>k</code> gives a star; letting
+    <code>k</code> drift through real numbers unfolds it into rolling
+    cardioid and epicycloid curves.
+  </p>
+
+  <div class="board">
+    <canvas id="board" width="400" height="400" role="img" aria-label="Circle of points connected by times-table chords"></canvas>
+  </div>
+
+  <div class="field">
+    <label for="pointsRange">Points (N) <span class="value" id="pointsValue">180</span></label>
+    <input type="range" id="pointsRange" min="20" max="300" step="1" value="180">
+  </div>
+  <div class="field">
+    <label for="multRange">Multiplier (k) <span class="value" id="multValue">2.00</span></label>
+    <input type="range" id="multRange" min="0" max="12" step="0.01" value="2">
+  </div>
+
+  <div class="controls">
+    <button class="action" id="playBtn" type="button" aria-pressed="true">Pause drift</button>
+    <button class="action" id="resetBtn" type="button">Reset</button>
+  </div>
+
+  <footer>
+    Chord endpoints are computed from a continuous angle
+    (<code>(i / N) × 2π</code>), not by indexing into an array, so a
+    fractional <code>k</code> still lands every chord at a real point on
+    the circle instead of snapping to the nearest one. Both sliders are
+    native <code>&lt;input type="range"&gt;</code> elements, so dragging
+    them works the same with a mouse or a finger.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const pointsRange = document.getElementById('pointsRange');
+  const multRange = document.getElementById('multRange');
+  const pointsValue = document.getElementById('pointsValue');
+  const multValue = document.getElementById('multValue');
+  const playBtn = document.getElementById('playBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const CX = canvas.width / 2;
+  const CY = canvas.height / 2;
+  const RADIUS = canvas.width / 2 - 20;
+  const DRIFT_PER_MS = 0.00025;
+
+  let N = Number(pointsRange.value);
+  let k = Number(multRange.value);
+  let drifting = true;
+  let lastFrame = performance.now();
+
+  function pointOn(circleIndex) {
+    const angle = (circleIndex / N) * Math.PI * 2 - Math.PI / 2;
+    return {
+      x: CX + Math.cos(angle) * RADIUS,
+      y: CY + Math.sin(angle) * RADIUS,
+    };
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < N; i++) {
+      const from = pointOn(i);
+      const target = (i * k) % N;
+      const to = pointOn(target);
+      const hue = (i / N) * 360;
+      ctx.strokeStyle = `hsla(${hue}, 85%, 60%, 0.45)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function syncLabels() {
+    pointsValue.textContent = String(N);
+    multValue.textContent = k.toFixed(2);
+  }
+
+  function frame(now) {
+    const dt = now - lastFrame;
+    lastFrame = now;
+    if (drifting) {
+      const max = Number(multRange.max);
+      k = (k + dt * DRIFT_PER_MS) % max;
+      multRange.value = k.toFixed(2);
+      syncLabels();
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  pointsRange.addEventListener('input', () => {
+    N = Number(pointsRange.value);
+    syncLabels();
+  });
+
+  multRange.addEventListener('input', () => {
+    drifting = false;
+    playBtn.textContent = 'Resume drift';
+    playBtn.setAttribute('aria-pressed', 'false');
+    k = Number(multRange.value);
+    syncLabels();
+  });
+
+  playBtn.addEventListener('click', () => {
+    drifting = !drifting;
+    lastFrame = performance.now();
+    playBtn.textContent = drifting ? 'Pause drift' : 'Resume drift';
+    playBtn.setAttribute('aria-pressed', String(drifting));
+  });
+
+  resetBtn.addEventListener('click', () => {
+    pointsRange.value = '180';
+    multRange.value = '2';
+    N = 180;
+    k = 2;
+    drifting = true;
+    playBtn.textContent = 'Pause drift';
+    playBtn.setAttribute('aria-pressed', 'true');
+    syncLabels();
+  });
+
+  syncLabels();
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
