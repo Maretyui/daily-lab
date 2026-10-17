@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>124 — Plinko Board</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem;
+  }
+
+  .board {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card);
+    padding: 1rem;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 400 / 520;
+    border-radius: 8px;
+    background: #0e1420;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+
+  button.action {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.action:hover { border-color: var(--accent); }
+
+  .status {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    min-height: 1.2em;
+  }
+
+  footer {
+    margin-top: 1.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>124 — Plinko Board</h1>
+  <p class="intro">
+    Tap or click anywhere on the board to drop a ball from the top. At
+    every peg it bounces left or right with equal odds, and the bin it
+    lands in builds up a live histogram underneath — drop enough balls
+    and the bars settle into a binomial curve.
+  </p>
+
+  <div class="board">
+    <canvas id="board" width="400" height="520" role="img" aria-label="Plinko board, tap to drop a ball"></canvas>
+  </div>
+
+  <div class="controls">
+    <button class="action" id="dropBtn" type="button">Drop a ball</button>
+    <button class="action" id="resetBtn" type="button">Reset counts</button>
+  </div>
+  <div class="status" id="status">0 balls dropped.</div>
+
+  <footer>
+    Each ball's path is just a coin flip per row — left or right at
+    every peg — rather than a full physics simulation, which is what
+    makes the bin counts converge on a binomial distribution instead of
+    a flat spread. Dropping is driven by <code>pointerdown</code>, so a
+    tap on a phone does the same thing a click does.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const dropBtn = document.getElementById('dropBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusEl = document.getElementById('status');
+
+  const ROWS = 8;
+  const PEG_SPACING = 32;
+  const ROW_HEIGHT = 40;
+  const CENTER_X = canvas.width / 2;
+  const TOP_MARGIN = 70;
+  const BIN_COUNT = ROWS + 1;
+  const PEG_RADIUS = 4;
+  const BALL_RADIUS = 6;
+  const STEP_MS = 140;
+  const HIST_TOP = TOP_MARGIN + ROWS * ROW_HEIGHT + 30;
+  const HIST_HEIGHT = canvas.height - HIST_TOP - 20;
+
+  const counts = new Array(BIN_COUNT).fill(0);
+  let dropped = 0;
+  const balls = [];
+
+  function pegX(row, col) {
+    return CENTER_X + (col - row / 2) * PEG_SPACING;
+  }
+  function pegY(row) {
+    return TOP_MARGIN + row * ROW_HEIGHT;
+  }
+  function binCenterX(bin) {
+    return bin * (canvas.width / BIN_COUNT) + (canvas.width / BIN_COUNT) / 2;
+  }
+
+  function spawnBall() {
+    // The whole path is decided up front as a sequence of coin flips —
+    // one per peg row — then just played back on a clock. That avoids
+    // a hand-rolled physics step every frame for something that's really
+    // a fixed random walk.
+    const waypoints = [{ x: CENTER_X, y: TOP_MARGIN - ROW_HEIGHT }];
+    let shift = 0;
+    for (let row = 0; row < ROWS; row++) {
+      shift += Math.random() < 0.5 ? 0 : 1;
+      waypoints.push({ x: pegX(row, shift), y: pegY(row) });
+    }
+    waypoints.push({ x: binCenterX(shift), y: HIST_TOP });
+    balls.push({ waypoints, finalShift: shift, started: performance.now(), counted: false });
+    dropped++;
+    statusEl.textContent = `${dropped} ball${dropped === 1 ? '' : 's'} dropped.`;
+  }
+
+  function ballPosition(ball, now) {
+    const totalSegments = ball.waypoints.length - 1;
+    const elapsed = now - ball.started;
+    const segment = Math.min(totalSegments - 1, Math.floor(elapsed / STEP_MS));
+    const segProgress = Math.min(1, (elapsed - segment * STEP_MS) / STEP_MS);
+    const from = ball.waypoints[segment];
+    const to = ball.waypoints[segment + 1];
+    const x = from.x + (to.x - from.x) * segProgress;
+    const y = from.y + (to.y - from.y) * segProgress;
+    const isPegHop = segment < totalSegments - 1;
+    const bounce = isPegHop ? Math.sin(segProgress * Math.PI) * 6 : 0;
+    const done = elapsed >= totalSegments * STEP_MS;
+    return { x, y: y - bounce, done };
+  }
+
+  function advance(now) {
+    for (let i = balls.length - 1; i >= 0; i--) {
+      const ball = balls[i];
+      if (ballPosition(ball, now).done) {
+        counts[ball.finalShift]++;
+        balls.splice(i, 1);
+      }
+    }
+  }
+
+  function drawPegs() {
+    ctx.fillStyle = '#2a3242';
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col <= row; col++) {
+        ctx.beginPath();
+        ctx.arc(pegX(row, col), pegY(row), PEG_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawHistogram() {
+    const max = Math.max(1, ...counts);
+    const binWidth = canvas.width / BIN_COUNT;
+    for (let i = 0; i < BIN_COUNT; i++) {
+      const h = (counts[i] / max) * HIST_HEIGHT;
+      const x = i * binWidth + 3;
+      const w = binWidth - 6;
+      ctx.fillStyle = '#14b8a6';
+      ctx.fillRect(x, HIST_TOP + HIST_HEIGHT - h, w, h);
+      ctx.strokeStyle = '#1f2530';
+      ctx.strokeRect(x, HIST_TOP, w, HIST_HEIGHT);
+      if (counts[i] > 0) {
+        ctx.fillStyle = '#8b93a7';
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(counts[i]), x + w / 2, HIST_TOP + HIST_HEIGHT - h - 4);
+      }
+    }
+  }
+
+  function drawBalls(now) {
+    ctx.fillStyle = '#f59e0b';
+    for (const ball of balls) {
+      const pos = ballPosition(ball, now);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function render(now) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawPegs();
+    drawHistogram();
+    drawBalls(now);
+  }
+
+  function frame(now) {
+    advance(now);
+    render(now);
+    requestAnimationFrame(frame);
+  }
+
+  canvas.addEventListener('pointerdown', spawnBall);
+  dropBtn.addEventListener('click', spawnBall);
+  resetBtn.addEventListener('click', () => {
+    counts.fill(0);
+    dropped = 0;
+    balls.length = 0;
+    statusEl.textContent = 'Counts reset.';
+  });
+
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
