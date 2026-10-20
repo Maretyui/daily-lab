@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>126 — Scroll Spy Nav</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 10;
+  }
+  a.back:hover { color: var(--accent); }
+
+  .layout {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  nav.spy {
+    position: sticky;
+    top: 0.5rem;
+    z-index: 5;
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 0.6rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  nav.spy a {
+    flex: none;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  nav.spy a:hover { color: var(--text); }
+
+  nav.spy a.active {
+    background: var(--accent);
+    color: #04201c;
+    font-weight: 600;
+  }
+
+  .sections {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  section.panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.25rem;
+    min-height: 260px;
+    scroll-margin-top: 4.5rem;
+  }
+
+  section.panel h2 {
+    margin: 0 0 0.6rem;
+    font-size: 1.05rem;
+    color: var(--accent);
+  }
+
+  section.panel p {
+    margin: 0 0 0.8rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  footer {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<div class="layout">
+  <h1>126 — Scroll Spy Nav</h1>
+  <p class="intro">
+    The pill row below tracks which section is in view as you scroll
+    and highlights it automatically — no scroll event listener, just an
+    <code>IntersectionObserver</code> watching each section's top band.
+  </p>
+
+  <nav class="spy" id="spyNav" aria-label="Section navigation">
+    <a href="#intro-sec" data-target="intro-sec">Intro</a>
+    <a href="#history-sec" data-target="history-sec">History</a>
+    <a href="#how-sec" data-target="how-sec">How it works</a>
+    <a href="#tradeoffs-sec" data-target="tradeoffs-sec">Trade-offs</a>
+    <a href="#more-sec" data-target="more-sec">More</a>
+  </nav>
+
+  <div class="sections">
+    <section class="panel" id="intro-sec">
+      <h2>Intro</h2>
+      <p>Scroll down through these panels on a phone or with a mouse wheel. Watch the pill above highlight itself as each section crosses into the "active band" near the top of the viewport.</p>
+    </section>
+    <section class="panel" id="history-sec">
+      <h2>History</h2>
+      <p>Scroll spies used to be built by listening to <code>scroll</code> events and manually comparing <code>getBoundingClientRect()</code> against the viewport on every frame — cheap-looking code that was actually a layout-thrashing performance trap.</p>
+    </section>
+    <section class="panel" id="how-sec">
+      <h2>How it works</h2>
+      <p>Each section is observed with a root margin that shrinks the detection zone to a thin band near the top: <code>rootMargin: "-15% 0px -70% 0px"</code>. Whichever section's top edge is inside that band when it fires gets the active class.</p>
+    </section>
+    <section class="panel" id="tradeoffs-sec">
+      <h2>Trade-offs</h2>
+      <p>Clicking a pill still needs to set the active class itself for the instant between the click and the scroll settling, since the observer only reports entries as they cross the threshold, not on jump-to.</p>
+    </section>
+    <section class="panel" id="more-sec">
+      <h2>More</h2>
+      <p>The same observer instance watches all five sections — one observer, five targets, no per-section listeners to clean up.</p>
+    </section>
+  </div>
+
+  <footer>
+    Built with a single <code>IntersectionObserver</code> whose
+    <code>rootMargin</code> turns the viewport into a thin horizontal
+    detection band near the top. Pill clicks scroll via
+    <code>scrollIntoView({ behavior: "smooth", block: "start" })</code> and
+    set the active class immediately so the UI doesn't lag behind the
+    click while the smooth scroll is still animating.
+  </footer>
+</div>
+
+<script>
+  const nav = document.getElementById('spyNav');
+  const links = [...nav.querySelectorAll('a')];
+  const sections = links.map(a => document.getElementById(a.dataset.target));
+
+  function setActive(id) {
+    for (const a of links) {
+      a.classList.toggle('active', a.dataset.target === id);
+    }
+  }
+
+  let suppressUntil = 0;
+
+  const observer = new IntersectionObserver((entries) => {
+    if (performance.now() < suppressUntil) return;
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        setActive(entry.target.id);
+      }
+    }
+  }, {
+    rootMargin: '-15% 0px -70% 0px',
+    threshold: 0
+  });
+
+  sections.forEach(sec => observer.observe(sec));
+
+  nav.addEventListener('click', (e) => {
+    const a = e.target.closest('a');
+    if (!a) return;
+    e.preventDefault();
+    const target = document.getElementById(a.dataset.target);
+    setActive(a.dataset.target);
+    // scrollIntoView fires several intersection entries mid-animation;
+    // ignore the observer briefly so the clicked pill doesn't flicker
+    // to a passing section before the scroll settles.
+    suppressUntil = performance.now() + 700;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  setActive('intro-sec');
+</script>
+</body>
+</html>
