@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>127 — Dual Range Slider</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --track: #2a3142;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 2rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.25rem;
+  }
+
+  .readout {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 1.5rem;
+  }
+
+  .readout .label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+
+  .readout .value {
+    font-size: 1.4rem;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .slider-wrap {
+    position: relative;
+    height: 2.2rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .slider-wrap .rail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--track);
+  }
+
+  .slider-wrap .fill {
+    position: absolute;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  .slider-wrap input[type="range"] {
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100%;
+    margin: 0;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    pointer-events: none;
+  }
+
+  /* Only the thumb is interactive — the invisible native track underneath
+     would otherwise swallow touches meant for whichever thumb is nearer,
+     since two full-width range inputs are stacked on top of each other. */
+  .slider-wrap input[type="range"]::-webkit-slider-thumb {
+    pointer-events: auto;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--border);
+    cursor: pointer;
+    touch-action: none;
+  }
+
+  .slider-wrap input[type="range"]::-moz-range-thumb {
+    pointer-events: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--bg);
+    box-shadow: 0 0 0 1px var(--border);
+    cursor: pointer;
+    touch-action: none;
+  }
+
+  .slider-wrap input[type="range"]::-moz-range-track {
+    background: transparent;
+  }
+
+  .slider-wrap input[type="range"]:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+  }
+
+  .bounds {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  footer {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <h1>127 — Dual Range Slider</h1>
+  <p class="intro">
+    Two native <code>&lt;input type="range"&gt;</code> elements stacked on
+    the same track, each pushing the other out of the way so the handles
+    never cross — a min/max price-filter pattern built from nothing but
+    native sliders.
+  </p>
+
+  <div class="card">
+    <div class="readout">
+      <div>
+        <span class="label">Min</span>
+        <span class="value" id="minValue">20</span>
+      </div>
+      <div>
+        <span class="label">Max</span>
+        <span class="value" id="maxValue">80</span>
+      </div>
+    </div>
+
+    <div class="slider-wrap">
+      <div class="rail"></div>
+      <div class="fill" id="fill"></div>
+      <input type="range" id="minRange" min="0" max="100" value="20" aria-label="Minimum value">
+      <input type="range" id="maxRange" min="0" max="100" value="80" aria-label="Maximum value">
+    </div>
+    <div class="bounds"><span>0</span><span>100</span></div>
+  </div>
+
+  <footer>
+    Both inputs share one invisible track; CSS makes everything but the
+    round thumb <code>pointer-events: none</code> so a touch always lands
+    on exactly one handle. JS clamps each input so dragging either one
+    pushes the other by at least 1, then repaints the <code>.fill</code>
+    bar's <code>left</code>/<code>right</code> from both values as plain
+    percentages.
+  </footer>
+</main>
+
+<script>
+  const minRange = document.getElementById('minRange');
+  const maxRange = document.getElementById('maxRange');
+  const minValue = document.getElementById('minValue');
+  const maxValue = document.getElementById('maxValue');
+  const fill = document.getElementById('fill');
+
+  function update() {
+    let min = Number(minRange.value);
+    let max = Number(maxRange.value);
+
+    if (min > max - 1) {
+      min = max - 1;
+      minRange.value = min;
+    }
+
+    const span = Number(minRange.max) - Number(minRange.min);
+    const leftPct = ((min - minRange.min) / span) * 100;
+    const rightPct = 100 - ((max - minRange.min) / span) * 100;
+
+    fill.style.left = leftPct + '%';
+    fill.style.right = rightPct + '%';
+    minValue.textContent = min;
+    maxValue.textContent = max;
+  }
+
+  minRange.addEventListener('input', () => {
+    if (Number(minRange.value) > Number(maxRange.value) - 1) {
+      minRange.value = Number(maxRange.value) - 1;
+    }
+    update();
+  });
+
+  maxRange.addEventListener('input', () => {
+    if (Number(maxRange.value) < Number(minRange.value) + 1) {
+      maxRange.value = Number(minRange.value) + 1;
+    }
+    update();
+  });
+
+  update();
+</script>
+</body>
+</html>
