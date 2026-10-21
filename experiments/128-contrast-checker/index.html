@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>128 — Contrast Checker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+    --fail: #ef4444;
+    --pass: #22c55e;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.25rem;
+  }
+
+  .pickers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .picker label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+  }
+
+  .picker .row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  input[type="color"] {
+    width: 2.6rem;
+    height: 2.6rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.95rem;
+    padding: 0.6rem 0.7rem;
+  }
+
+  input[type="text"]:focus-visible,
+  input[type="color"]:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  button.swap {
+    width: 100%;
+    margin-top: 1.25rem;
+    padding: 0.7rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button.swap:hover { border-color: var(--accent); }
+
+  .preview {
+    border-radius: 10px;
+    padding: 2rem 1.25rem;
+    text-align: center;
+    transition: background-color 0.15s, color 0.15s;
+  }
+  .preview .big {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 0.35rem;
+  }
+  .preview .small {
+    font-size: 0.85rem;
+    margin: 0;
+  }
+
+  .ratio {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 1.25rem 0 1rem;
+  }
+  .ratio .num {
+    font-size: 2.4rem;
+    font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .ratio .label {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .results {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.6rem;
+  }
+
+  .result {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.8rem;
+  }
+  .result .tier {
+    color: var(--muted);
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+  .result .verdict {
+    font-weight: 600;
+  }
+  .result .verdict.pass { color: var(--pass); }
+  .result .verdict.fail { color: var(--fail); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>128 — Contrast Checker</h1>
+    <p class="intro">
+      Pick a foreground and background color and get the actual WCAG
+      contrast ratio, computed from relative luminance — not a guess from
+      how the colors look.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="pickers">
+      <div class="picker">
+        <label for="fgColor">Foreground</label>
+        <div class="row">
+          <input type="color" id="fgColor" value="#e6e9ef" aria-label="Foreground color picker">
+          <input type="text" id="fgHex" value="#e6e9ef" aria-label="Foreground hex value" maxlength="7" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <div class="picker">
+        <label for="bgColor">Background</label>
+        <div class="row">
+          <input type="color" id="bgColor" value="#0b0e14" aria-label="Background color picker">
+          <input type="text" id="bgHex" value="#0b0e14" aria-label="Background hex value" maxlength="7" inputmode="text" autocapitalize="off" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+    </div>
+    <button type="button" class="swap" id="swapBtn">⇄ Swap foreground / background</button>
+  </div>
+
+  <div class="card preview" id="previewCard">
+    <p class="big" id="previewBig">The quick brown fox</p>
+    <p class="small" id="previewSmall">Sample body text at normal size</p>
+  </div>
+
+  <div class="card">
+    <div class="ratio">
+      <span class="num" id="ratioNum">—</span>
+      <span class="label">: 1 contrast ratio</span>
+    </div>
+    <div class="results">
+      <div class="result">
+        <span class="tier">AA · normal text (4.5:1)</span>
+        <span class="verdict" id="aaNormal">—</span>
+      </div>
+      <div class="result">
+        <span class="tier">AA · large text (3:1)</span>
+        <span class="verdict" id="aaLarge">—</span>
+      </div>
+      <div class="result">
+        <span class="tier">AAA · normal text (7:1)</span>
+        <span class="verdict" id="aaaNormal">—</span>
+      </div>
+      <div class="result">
+        <span class="tier">AAA · large text (4.5:1)</span>
+        <span class="verdict" id="aaaLarge">—</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Ratio is <code>(L1 + 0.05) / (L2 + 0.05)</code>, where L1/L2 are each
+    color's relative luminance (WCAG 2.x's own formula: gamma-decode each
+    sRGB channel, then weight R/G/B 0.2126 / 0.7152 / 0.0722) and L1 is
+    always the lighter of the two — same math browsers and design tools
+    use, run here on every keystroke or color-picker drag.
+  </footer>
+</main>
+
+<script>
+  const fgColor = document.getElementById('fgColor');
+  const fgHex = document.getElementById('fgHex');
+  const bgColor = document.getElementById('bgColor');
+  const bgHex = document.getElementById('bgHex');
+  const previewCard = document.getElementById('previewCard');
+  const ratioNum = document.getElementById('ratioNum');
+  const swapBtn = document.getElementById('swapBtn');
+
+  const verdicts = {
+    aaNormal: document.getElementById('aaNormal'),
+    aaLarge: document.getElementById('aaLarge'),
+    aaaNormal: document.getElementById('aaaNormal'),
+    aaaLarge: document.getElementById('aaaLarge'),
+  };
+
+  function normalizeHex(hex) {
+    let h = hex.trim();
+    if (!h.startsWith('#')) h = '#' + h;
+    if (/^#[0-9a-fA-F]{3}$/.test(h)) {
+      h = '#' + [...h.slice(1)].map((c) => c + c).join('');
+    }
+    return /^#[0-9a-fA-F]{6}$/.test(h) ? h.toLowerCase() : null;
+  }
+
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function relativeLuminance([r, g, b]) {
+    const chan = (c) => {
+      const s = c / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const [R, G, B] = [chan(r), chan(g), chan(b)];
+    return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  }
+
+  function contrastRatio(hexA, hexB) {
+    const lA = relativeLuminance(hexToRgb(hexA));
+    const lB = relativeLuminance(hexToRgb(hexB));
+    const lighter = Math.max(lA, lB);
+    const darker = Math.min(lA, lB);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function setVerdict(el, pass) {
+    el.textContent = pass ? 'Pass' : 'Fail';
+    el.className = 'verdict ' + (pass ? 'pass' : 'fail');
+  }
+
+  function update() {
+    const fg = normalizeHex(fgHex.value);
+    const bg = normalizeHex(bgHex.value);
+    if (!fg || !bg) return;
+
+    previewCard.style.color = fg;
+    previewCard.style.backgroundColor = bg;
+
+    const ratio = contrastRatio(fg, bg);
+    ratioNum.textContent = ratio.toFixed(2);
+
+    setVerdict(verdicts.aaNormal, ratio >= 4.5);
+    setVerdict(verdicts.aaLarge, ratio >= 3);
+    setVerdict(verdicts.aaaNormal, ratio >= 7);
+    setVerdict(verdicts.aaaLarge, ratio >= 4.5);
+  }
+
+  function wireColorPair(colorInput, hexInput) {
+    colorInput.addEventListener('input', () => {
+      hexInput.value = colorInput.value;
+      update();
+    });
+    hexInput.addEventListener('input', () => {
+      const normalized = normalizeHex(hexInput.value);
+      if (normalized) colorInput.value = normalized;
+      update();
+    });
+  }
+
+  wireColorPair(fgColor, fgHex);
+  wireColorPair(bgColor, bgHex);
+
+  swapBtn.addEventListener('click', () => {
+    [fgColor.value, bgColor.value] = [bgColor.value, fgColor.value];
+    [fgHex.value, bgHex.value] = [bgHex.value, fgHex.value];
+    update();
+  });
+
+  update();
+</script>
+</body>
+</html>
