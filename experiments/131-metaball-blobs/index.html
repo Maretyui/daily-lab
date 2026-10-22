@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>131 — Metaball Blobs</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 5 / 3;
+    border-radius: 8px;
+    background: var(--bg);
+    touch-action: none;
+    cursor: pointer;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  input[type="range"] {
+    accent-color: var(--accent);
+    width: 9rem;
+  }
+
+  button {
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover { color: var(--text); }
+
+  button:focus-visible,
+  input:focus-visible,
+  canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>131 — Metaball Blobs</h1>
+    <p class="intro">
+      A handful of drifting blobs that melt into each other on approach
+      instead of overlapping like flat circles. Tap or click anywhere on
+      the canvas to drop in another one.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="canvas-wrap">
+      <canvas id="field" width="600" height="360"></canvas>
+    </div>
+    <div class="controls">
+      <div class="field">
+        <label for="threshold">Threshold</label>
+        <input type="range" id="threshold" min="0.4" max="2.4" step="0.05" value="1.1">
+      </div>
+      <button type="button" id="addBlob">Add blob</button>
+      <button type="button" class="ghost" id="resetBlobs">Reset</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <footer>
+    Each blob contributes <code>radius&sup2; / distance&sup2;</code> to every
+    point of a low-resolution scalar field (a classic metaball falloff);
+    the summed field is painted into a 150&times;90 off-screen canvas and
+    scaled up with the browser's own bilinear interpolation, which is what
+    turns a blocky grid of numbers into a smooth, melting edge for free.
+    The threshold slider moves the cutoff value at which a point counts as
+    "inside" a blob.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('field');
+  const ctx = canvas.getContext('2d');
+  const thresholdInput = document.getElementById('threshold');
+  const addBlobBtn = document.getElementById('addBlob');
+  const resetBlobsBtn = document.getElementById('resetBlobs');
+  const status = document.getElementById('status');
+
+  const SCALE = 4;
+  const bufW = canvas.width / SCALE;
+  const bufH = canvas.height / SCALE;
+
+  const buffer = document.createElement('canvas');
+  buffer.width = bufW;
+  buffer.height = bufH;
+  const bufCtx = buffer.getContext('2d');
+  const imageData = bufCtx.createImageData(bufW, bufH);
+
+  const MAX_BLOBS = 14;
+  let blobs = [];
+
+  function randomBlob(x, y) {
+    const r = 8 + Math.random() * 10;
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 0.25 + Math.random() * 0.5;
+    return {
+      x: x ?? Math.random() * bufW,
+      y: y ?? Math.random() * bufH,
+      r,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed
+    };
+  }
+
+  function seedBlobs() {
+    blobs = Array.from({ length: 5 }, () => randomBlob());
+    updateStatus();
+  }
+
+  function addBlob(x, y) {
+    blobs.push(randomBlob(x, y));
+    if (blobs.length > MAX_BLOBS) blobs.shift();
+    updateStatus();
+  }
+
+  function updateStatus() {
+    status.textContent = `${blobs.length} blob${blobs.length === 1 ? '' : 's'} — tap the canvas to drop another, up to ${MAX_BLOBS}.`;
+  }
+
+  function smoothstep(edge0, edge1, x) {
+    const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+  }
+
+  function step() {
+    for (const b of blobs) {
+      b.x += b.vx;
+      b.y += b.vy;
+      if (b.x < 0 || b.x > bufW) { b.vx *= -1; b.x = Math.min(bufW, Math.max(0, b.x)); }
+      if (b.y < 0 || b.y > bufH) { b.vy *= -1; b.y = Math.min(bufH, Math.max(0, b.y)); }
+    }
+  }
+
+  function render() {
+    const threshold = Number(thresholdInput.value);
+    const data = imageData.data;
+    const edge = 0.35;
+
+    for (let y = 0; y < bufH; y++) {
+      for (let x = 0; x < bufW; x++) {
+        let field = 0;
+        for (const b of blobs) {
+          const dx = x - b.x;
+          const dy = y - b.y;
+          const distSq = dx * dx + dy * dy + 0.0001;
+          field += (b.r * b.r) / distSq;
+        }
+
+        const alpha = smoothstep(threshold - edge, threshold + edge, field);
+        const hot = Math.min(1, Math.max(0, (field - threshold) / (threshold * 2)));
+
+        const i = (y * bufW + x) * 4;
+        data[i] = 20 + hot * (210 - 20);
+        data[i + 1] = 184 + hot * (255 - 184);
+        data[i + 2] = 166 + hot * (230 - 166);
+        data[i + 3] = alpha * 255;
+      }
+    }
+
+    bufCtx.putImageData(imageData, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(buffer, 0, 0, bufW, bufH, 0, 0, canvas.width, canvas.height);
+  }
+
+  function tick() {
+    step();
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    addBlob(x / SCALE, y / SCALE);
+  });
+
+  addBlobBtn.addEventListener('click', () => addBlob());
+  resetBlobsBtn.addEventListener('click', seedBlobs);
+
+  seedBlobs();
+  tick();
+</script>
+</body>
+</html>
