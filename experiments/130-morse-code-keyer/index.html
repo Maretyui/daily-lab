@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>130 — Morse Code Keyer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+  }
+
+  textarea, input[type="text"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    padding: 0.75rem;
+    font-family: inherit;
+  }
+
+  textarea {
+    min-height: 4rem;
+    resize: vertical;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    letter-spacing: 0.05em;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .field + .field {
+    margin-top: 1rem;
+  }
+
+  .keyer-btn {
+    width: 100%;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 12px;
+    padding: 1.5rem 1rem;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .keyer-btn.pressed {
+    background: #0ea394;
+    transform: scale(0.98);
+  }
+  .keyer-btn:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+  }
+
+  .readout {
+    margin-top: 1rem;
+    display: grid;
+    gap: 0.6rem;
+  }
+  .readout .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .readout .value {
+    font-size: 1.1rem;
+    color: var(--text);
+    word-break: break-word;
+  }
+
+  .decoded {
+    min-height: 2.2rem;
+    font-size: 1.15rem;
+  }
+
+  button.clear {
+    margin-top: 0.75rem;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  button.clear:hover { color: var(--text); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>130 — Morse Code Keyer</h1>
+    <p class="intro">
+      Type text to see it in Morse, or type dots and dashes to see them
+      decoded back to text. Then try keying it by hand: hold the button for
+      a dot or a dash, and pause to let a letter or a word resolve on its
+      own — same as the translator above, but timed by touch instead of
+      typed.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="field">
+      <label for="textIn">Text</label>
+      <input type="text" id="textIn" placeholder="Type a message" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="morseIn">Morse (. and -, space between letters, / between words)</label>
+      <textarea id="morseIn" class="mono" spellcheck="false" placeholder="... --- ..."></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Hand key it</label>
+    <button type="button" class="keyer-btn" id="keyerBtn">Hold for dot, hold longer for dash</button>
+    <div class="readout">
+      <div class="row">
+        <span>Current letter</span>
+        <span class="value mono" id="currentSymbols">&nbsp;</span>
+      </div>
+      <div class="row">
+        <span>Decoded</span>
+      </div>
+      <div class="value decoded" id="keyedText">&nbsp;</div>
+    </div>
+    <button type="button" class="clear" id="clearKeyed">Clear keyed text</button>
+  </div>
+
+  <footer>
+    A press under 250ms is a dot, anything longer is a dash. Releasing and
+    pausing for 600ms resolves the held dots/dashes into a letter; pausing
+    1.4s adds a word space. A single <code>GainNode</code> gates one
+    continuously-running oscillator so the beep starts and stops instantly
+    with no per-press audio node allocation, and <code>touch-action:
+    none</code> on the button stops the hold-press from also trying to
+    scroll the page on a phone.
+  </footer>
+</main>
+
+<script>
+  const MORSE = {
+    A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.',
+    H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--', N: '-.',
+    O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-',
+    V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..',
+    0: '-----', 1: '.----', 2: '..---', 3: '...--', 4: '....-',
+    5: '.....', 6: '-....', 7: '--...', 8: '---..', 9: '----.'
+  };
+  const FROM_MORSE = Object.fromEntries(Object.entries(MORSE).map(([k, v]) => [v, k]));
+
+  function textToMorse(text) {
+    return text
+      .toUpperCase()
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(word => word.split('').map(ch => MORSE[ch] || '').filter(Boolean).join(' '))
+      .join(' / ');
+  }
+
+  function morseToText(morse) {
+    return morse
+      .trim()
+      .split('/')
+      .map(word => word.trim().split(/\s+/).filter(Boolean)
+        .map(code => FROM_MORSE[code] || '')
+        .join(''))
+      .join(' ');
+  }
+
+  const textIn = document.getElementById('textIn');
+  const morseIn = document.getElementById('morseIn');
+  let syncing = false;
+
+  textIn.addEventListener('input', () => {
+    if (syncing) return;
+    syncing = true;
+    morseIn.value = textToMorse(textIn.value);
+    syncing = false;
+  });
+
+  morseIn.addEventListener('input', () => {
+    if (syncing) return;
+    syncing = true;
+    textIn.value = morseToText(morseIn.value);
+    syncing = false;
+  });
+
+  // --- hand keyer ---
+  const keyerBtn = document.getElementById('keyerBtn');
+  const currentSymbols = document.getElementById('currentSymbols');
+  const keyedText = document.getElementById('keyedText');
+  const clearKeyed = document.getElementById('clearKeyed');
+
+  const DOT_MAX_MS = 250;
+  const LETTER_GAP_MS = 600;
+  const WORD_GAP_MS = 1400;
+
+  let audioCtx = null;
+  let oscillator = null;
+  let gainNode = null;
+  let pressStart = 0;
+  let symbolBuffer = [];
+  let decoded = '';
+  let letterTimer = null;
+  let wordTimer = null;
+
+  function ensureAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    oscillator = audioCtx.createOscillator();
+    gainNode = audioCtx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 600;
+    gainNode.gain.value = 0;
+    oscillator.connect(gainNode).connect(audioCtx.destination);
+    oscillator.start();
+  }
+
+  function toneOn() {
+    ensureAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.linearRampToValueAtTime(0.2, now + 0.01);
+  }
+
+  function toneOff() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.linearRampToValueAtTime(0, now + 0.03);
+  }
+
+  function renderSymbols() {
+    currentSymbols.textContent = symbolBuffer.length ? symbolBuffer.join('') : ' ';
+  }
+
+  function renderDecoded() {
+    keyedText.textContent = decoded || ' ';
+  }
+
+  function finalizeLetter() {
+    if (symbolBuffer.length === 0) return;
+    const code = symbolBuffer.join('');
+    decoded += FROM_MORSE[code] || '?';
+    symbolBuffer = [];
+    renderSymbols();
+    renderDecoded();
+  }
+
+  function startPress() {
+    clearTimeout(letterTimer);
+    clearTimeout(wordTimer);
+    pressStart = performance.now();
+    toneOn();
+    keyerBtn.classList.add('pressed');
+  }
+
+  function endPress() {
+    if (!pressStart) return;
+    toneOff();
+    keyerBtn.classList.remove('pressed');
+    const duration = performance.now() - pressStart;
+    pressStart = 0;
+    symbolBuffer.push(duration < DOT_MAX_MS ? '.' : '-');
+    renderSymbols();
+
+    letterTimer = setTimeout(finalizeLetter, LETTER_GAP_MS);
+    wordTimer = setTimeout(() => {
+      finalizeLetter();
+      decoded += ' ';
+      renderDecoded();
+    }, WORD_GAP_MS);
+  }
+
+  keyerBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    startPress();
+  });
+  keyerBtn.addEventListener('pointerup', endPress);
+  keyerBtn.addEventListener('pointercancel', endPress);
+  keyerBtn.addEventListener('pointerleave', () => {
+    if (pressStart) endPress();
+  });
+
+  clearKeyed.addEventListener('click', () => {
+    clearTimeout(letterTimer);
+    clearTimeout(wordTimer);
+    symbolBuffer = [];
+    decoded = '';
+    renderSymbols();
+    renderDecoded();
+  });
+
+  renderSymbols();
+  renderDecoded();
+</script>
+</body>
+</html>
