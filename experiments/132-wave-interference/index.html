@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>132 — Wave Interference</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 5 / 3;
+    border-radius: 8px;
+    background: var(--bg);
+    touch-action: none;
+    cursor: pointer;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  input[type="range"] {
+    accent-color: var(--accent);
+    width: 9rem;
+  }
+
+  button {
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover { color: var(--text); }
+
+  button:focus-visible,
+  input:focus-visible,
+  canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>132 — Wave Interference</h1>
+    <p class="intro">
+      Two or more point sources, each radiating circular waves. Where crests
+      line up they reinforce into bright bands; where a crest meets a
+      trough they cancel into dark ones. Drag a source to move it, or tap
+      empty water to drop in another.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="canvas-wrap">
+      <canvas id="field" width="600" height="360"></canvas>
+    </div>
+    <div class="controls">
+      <div class="field">
+        <label for="wavelength">Wavelength</label>
+        <input type="range" id="wavelength" min="6" max="26" step="1" value="14">
+      </div>
+      <button type="button" class="ghost" id="resetSources">Reset</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <footer>
+    Each source contributes <code>sin(2&pi; &times; (distance / wavelength
+    &minus; t))</code> to every point of a low-resolution buffer; the
+    amplitudes are summed and mapped to a blue&ndash;white&ndash;red scale
+    (trough&ndash;node&ndash;crest), the same way two speakers playing the
+    same tone create loud and quiet spots around a room.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('field');
+  const ctx = canvas.getContext('2d');
+  const wavelengthInput = document.getElementById('wavelength');
+  const resetBtn = document.getElementById('resetSources');
+  const status = document.getElementById('status');
+
+  const SCALE = 4;
+  const bufW = canvas.width / SCALE;
+  const bufH = canvas.height / SCALE;
+
+  const buffer = document.createElement('canvas');
+  buffer.width = bufW;
+  buffer.height = bufH;
+  const bufCtx = buffer.getContext('2d');
+  const imageData = bufCtx.createImageData(bufW, bufH);
+
+  const MAX_SOURCES = 4;
+  const HIT_RADIUS = 10;
+  let sources = [];
+  let draggingIndex = -1;
+  let t = 0;
+
+  function seedSources() {
+    sources = [
+      { x: bufW * 0.35, y: bufH * 0.5 },
+      { x: bufW * 0.65, y: bufH * 0.5 }
+    ];
+    updateStatus();
+  }
+
+  function updateStatus() {
+    status.textContent = `${sources.length} source${sources.length === 1 ? '' : 's'} — drag one to move it, tap empty water for another, up to ${MAX_SOURCES}.`;
+  }
+
+  function toBufferCoords(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (evt.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (evt.clientY - rect.top) * (canvas.height / rect.height);
+    return { x: x / SCALE, y: y / SCALE };
+  }
+
+  function findNearSource(x, y) {
+    let closest = -1;
+    let closestDist = HIT_RADIUS;
+    sources.forEach((s, i) => {
+      const d = Math.hypot(s.x - x, s.y - y);
+      if (d < closestDist) {
+        closestDist = d;
+        closest = i;
+      }
+    });
+    return closest;
+  }
+
+  function render() {
+    const wavelength = Number(wavelengthInput.value);
+    const data = imageData.data;
+
+    for (let y = 0; y < bufH; y++) {
+      for (let x = 0; x < bufW; x++) {
+        let amplitude = 0;
+        for (const s of sources) {
+          const dist = Math.hypot(x - s.x, y - s.y);
+          amplitude += Math.sin(2 * Math.PI * (dist / wavelength - t));
+        }
+        if (sources.length > 0) amplitude /= Math.sqrt(sources.length);
+
+        const i = (y * bufW + x) * 4;
+        if (amplitude >= 0) {
+          // node (gray) -> crest (warm red/white)
+          data[i] = 30 + amplitude * 220;
+          data[i + 1] = 30 + amplitude * 70;
+          data[i + 2] = 40 + amplitude * 40;
+        } else {
+          // node (gray) -> trough (cool blue)
+          const m = -amplitude;
+          data[i] = 20 + m * 10;
+          data[i + 1] = 30 + m * 90;
+          data[i + 2] = 40 + m * 220;
+        }
+        data[i + 3] = 255;
+      }
+    }
+
+    bufCtx.putImageData(imageData, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(buffer, 0, 0, bufW, bufH, 0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for (const s of sources) {
+      ctx.beginPath();
+      ctx.arc(s.x * SCALE, s.y * SCALE, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function tick() {
+    t += 0.01;
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  canvas.addEventListener('pointerdown', (evt) => {
+    const { x, y } = toBufferCoords(evt);
+    const near = findNearSource(x, y);
+    if (near !== -1) {
+      draggingIndex = near;
+      canvas.setPointerCapture(evt.pointerId);
+    } else if (sources.length < MAX_SOURCES) {
+      sources.push({ x, y });
+      updateStatus();
+    }
+  });
+
+  canvas.addEventListener('pointermove', (evt) => {
+    if (draggingIndex === -1) return;
+    const { x, y } = toBufferCoords(evt);
+    sources[draggingIndex].x = Math.min(bufW, Math.max(0, x));
+    sources[draggingIndex].y = Math.min(bufH, Math.max(0, y));
+  });
+
+  function stopDrag(evt) {
+    draggingIndex = -1;
+    if (canvas.hasPointerCapture(evt.pointerId)) {
+      canvas.releasePointerCapture(evt.pointerId);
+    }
+  }
+
+  canvas.addEventListener('pointerup', stopDrag);
+  canvas.addEventListener('pointercancel', stopDrag);
+
+  resetBtn.addEventListener('click', seedSources);
+
+  seedSources();
+  tick();
+</script>
+</body>
+</html>
