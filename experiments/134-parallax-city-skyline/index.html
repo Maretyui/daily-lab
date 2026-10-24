@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>134 — Parallax City Skyline</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    border-radius: 8px;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 5 / 3;
+    background: var(--bg);
+    touch-action: none;
+    cursor: grab;
+  }
+  canvas.dragging { cursor: grabbing; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  button {
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover { color: var(--text); }
+
+  button:focus-visible,
+  canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>134 — Parallax City Skyline</h1>
+    <p class="intro">
+      Four layers of procedurally generated buildings drift past at
+      different speeds as you drag, with a sprinkle of lit windows that
+      flicker on their own. Drag or swipe the canvas to pan; regenerate
+      for a brand new skyline.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="canvas-wrap">
+      <canvas id="sky" width="600" height="360" tabindex="0"></canvas>
+    </div>
+    <div class="controls">
+      <button type="button" id="regenBtn">New skyline</button>
+      <button type="button" class="ghost" id="resetPanBtn">Reset pan</button>
+    </div>
+    <p class="status" id="status">Drag to pan. 4 parallax layers.</p>
+  </div>
+
+  <footer>
+    Each layer is a deterministic sequence of random buildings (seeded
+    with <code>Math.random</code> at generation time, not re-rolled every
+    frame) drawn once onto an offscreen canvas wider than the viewport,
+    then re-drawn into view shifted by <code>panX * layer.speed</code> &mdash;
+    the back layer barely moves, the front layer moves almost 1:1 with
+    your drag, which is the entire parallax illusion. A handful of
+    windows per building toggle on a random interval via
+    <code>setInterval</code> to fake life after dark.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('sky');
+  const ctx = canvas.getContext('2d');
+  const status = document.getElementById('status');
+  const regenBtn = document.getElementById('regenBtn');
+  const resetPanBtn = document.getElementById('resetPanBtn');
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const LAYER_WIDTH = W * 2.5;
+
+  const LAYERS = [
+    { speed: 0.08, color: '#131a2b', windowColor: '#2a3550', minH: 0.25, maxH: 0.55, gap: 14, baseY: H * 0.62 },
+    { speed: 0.22, color: '#1b2438', windowColor: '#3c4a6d', minH: 0.35, maxH: 0.7, gap: 18, baseY: H * 0.72 },
+    { speed: 0.45, color: '#26314d', windowColor: '#f5c451', minH: 0.45, maxH: 0.85, gap: 22, baseY: H * 0.85 },
+    { speed: 0.8, color: '#333f5c', windowColor: '#ffdf8a', minH: 0.55, maxH: 1.0, gap: 30, baseY: H * 1.0 }
+  ];
+
+  let layerCanvases = [];
+  let panX = 0;
+  let dragging = false;
+  let dragStartX = 0;
+  let panAtDragStart = 0;
+
+  function buildLayer(layer) {
+    const off = document.createElement('canvas');
+    off.width = LAYER_WIDTH;
+    off.height = H;
+    const octx = off.getContext('2d');
+    const buildings = [];
+
+    let x = 0;
+    while (x < LAYER_WIDTH) {
+      const bw = layer.gap + Math.random() * layer.gap * 1.6;
+      const bh = (layer.minH + Math.random() * (layer.maxH - layer.minH)) * H;
+      buildings.push({ x, w: bw, h: bh });
+      x += bw + 2;
+    }
+
+    octx.fillStyle = layer.color;
+    for (const b of buildings) {
+      const top = layer.baseY - b.h;
+      octx.fillRect(b.x, top, b.w, b.h + H);
+    }
+
+    const windows = [];
+    for (const b of buildings) {
+      const top = layer.baseY - b.h;
+      const cols = Math.max(1, Math.floor(b.w / 10));
+      const rows = Math.max(1, Math.floor(b.h / 12));
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+          if (Math.random() < 0.35) continue;
+          const wx = b.x + 3 + c * (b.w / cols);
+          const wy = top + 4 + r * (b.h / rows);
+          windows.push({ x: wx, y: wy, w: Math.max(2, b.w / cols - 3), h: Math.max(2, b.h / rows - 4), lit: Math.random() < 0.5 });
+        }
+      }
+    }
+
+    const windowCanvas = document.createElement('canvas');
+    windowCanvas.width = LAYER_WIDTH;
+    windowCanvas.height = H;
+    return { canvas: off, windowCanvas, windows, color: layer.windowColor };
+  }
+
+  function paintWindows(built) {
+    const wctx = built.windowCanvas.getContext('2d');
+    wctx.clearRect(0, 0, built.windowCanvas.width, built.windowCanvas.height);
+    wctx.fillStyle = built.color;
+    for (const win of built.windows) {
+      if (!win.lit) continue;
+      wctx.fillRect(win.x, win.y, win.w, win.h);
+    }
+  }
+
+  function generateSkyline() {
+    layerCanvases = LAYERS.map(buildLayer);
+    layerCanvases.forEach(paintWindows);
+    status.textContent = 'New skyline generated. Drag to pan. 4 parallax layers.';
+    render();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#060810');
+    grad.addColorStop(1, '#0d1220');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < LAYERS.length; i++) {
+      const layer = LAYERS[i];
+      const built = layerCanvases[i];
+      const shift = ((panX * layer.speed) % LAYER_WIDTH + LAYER_WIDTH) % LAYER_WIDTH;
+      const drawX = -shift;
+      ctx.drawImage(built.canvas, drawX, 0);
+      ctx.drawImage(built.windowCanvas, drawX, 0);
+      if (drawX + LAYER_WIDTH < W) {
+        ctx.drawImage(built.canvas, drawX + LAYER_WIDTH, 0);
+        ctx.drawImage(built.windowCanvas, drawX + LAYER_WIDTH, 0);
+      }
+    }
+  }
+
+  function flickerWindows() {
+    for (const built of layerCanvases) {
+      if (!built.windows.length) continue;
+      for (let n = 0; n < 3; n++) {
+        const win = built.windows[Math.floor(Math.random() * built.windows.length)];
+        win.lit = Math.random() < 0.5;
+      }
+      paintWindows(built);
+    }
+    render();
+  }
+
+  function pointerX(evt) {
+    const rect = canvas.getBoundingClientRect();
+    return (evt.clientX - rect.left) * (canvas.width / rect.width);
+  }
+
+  canvas.addEventListener('pointerdown', (evt) => {
+    dragging = true;
+    canvas.classList.add('dragging');
+    dragStartX = pointerX(evt);
+    panAtDragStart = panX;
+    canvas.setPointerCapture(evt.pointerId);
+  });
+
+  canvas.addEventListener('pointermove', (evt) => {
+    if (!dragging) return;
+    const x = pointerX(evt);
+    panX = panAtDragStart - (x - dragStartX);
+    render();
+  });
+
+  function stopDrag() {
+    dragging = false;
+    canvas.classList.remove('dragging');
+  }
+  canvas.addEventListener('pointerup', stopDrag);
+  canvas.addEventListener('pointercancel', stopDrag);
+
+  canvas.addEventListener('keydown', (evt) => {
+    if (evt.key === 'ArrowLeft') { panX -= 20; render(); }
+    if (evt.key === 'ArrowRight') { panX += 20; render(); }
+  });
+
+  regenBtn.addEventListener('click', generateSkyline);
+  resetPanBtn.addEventListener('click', () => { panX = 0; render(); });
+
+  generateSkyline();
+  setInterval(flickerWindows, 600);
+</script>
+</body>
+</html>
