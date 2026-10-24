@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>135 — Draggable Curve Chart</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 5 / 3;
+    border-radius: 8px;
+    background: var(--bg);
+    touch-action: none;
+    cursor: pointer;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  button {
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover { color: var(--text); }
+
+  button:focus-visible,
+  canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>135 — Draggable Curve Chart</h1>
+    <p class="intro">
+      Drag any of the seven control points up or down and the whole
+      curve reflows live through a Catmull-Rom spline — no chart
+      library, just bezier math on a canvas.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="canvas-wrap">
+      <canvas id="chart" width="600" height="360" tabindex="0"></canvas>
+    </div>
+    <div class="controls">
+      <button type="button" id="randomizeBtn">Randomize</button>
+      <button type="button" class="ghost" id="flattenBtn">Flatten</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <footer>
+    Each point only ever moves vertically along its fixed x slot. The
+    curve between them is a Catmull-Rom spline converted to cubic
+    Bezier segments on the fly: for interior point <code>p1</code>
+    heading to <code>p2</code>, the two Bezier control handles are
+    derived from the previous and next points
+    (<code>p1 + (p2 - p0) / 6</code> and
+    <code>p2 - (p3 - p1) / 6</code>), so the curve always passes exactly
+    through every point while staying smooth across the join &mdash; no
+    manual handle-dragging required.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  const status = document.getElementById('status');
+  const randomizeBtn = document.getElementById('randomizeBtn');
+  const flattenBtn = document.getElementById('flattenBtn');
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const PAD = 24;
+  const POINT_COUNT = 7;
+  const HIT_RADIUS = 24;
+
+  let points = [];
+  let dragIndex = -1;
+
+  function makePoints(randomize) {
+    const usableW = W - PAD * 2;
+    points = Array.from({ length: POINT_COUNT }, (_, i) => ({
+      x: PAD + (usableW * i) / (POINT_COUNT - 1),
+      y: randomize ? PAD + Math.random() * (H - PAD * 2) : H / 2
+    }));
+  }
+
+  function valueOf(point) {
+    // 0 at the bottom, 100 at the top, for the status readout.
+    return Math.round(((H - PAD - point.y) / (H - PAD * 2)) * 100);
+  }
+
+  function updateStatus() {
+    status.textContent = points.map((p) => valueOf(p)).join('  ·  ');
+  }
+
+  function drawSpline() {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i - 1] || points[i];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2] || p2;
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+    ctx.strokeStyle = '#14b8a6';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.lineTo(points[points.length - 1].x, H - PAD);
+    ctx.lineTo(points[0].x, H - PAD);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(20, 184, 166, 0.12)';
+    ctx.fill();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.strokeStyle = '#1f2530';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = PAD + ((H - PAD * 2) * i) / 4;
+      ctx.beginPath();
+      ctx.moveTo(PAD, y);
+      ctx.lineTo(W - PAD, y);
+      ctx.stroke();
+    }
+
+    drawSpline();
+
+    for (const p of points) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#e6e9ef';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#14b8a6';
+      ctx.stroke();
+    }
+
+    updateStatus();
+  }
+
+  function toCanvasPoint(evt) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (evt.clientX - rect.left) * (canvas.width / rect.width),
+      y: (evt.clientY - rect.top) * (canvas.height / rect.height)
+    };
+  }
+
+  function nearestPointIndex(pos) {
+    let best = -1;
+    let bestDist = HIT_RADIUS;
+    points.forEach((p, i) => {
+      const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  canvas.addEventListener('pointerdown', (evt) => {
+    const pos = toCanvasPoint(evt);
+    dragIndex = nearestPointIndex(pos);
+    if (dragIndex !== -1) {
+      canvas.setPointerCapture(evt.pointerId);
+      points[dragIndex].y = Math.min(H - PAD, Math.max(PAD, pos.y));
+      render();
+    }
+  });
+
+  canvas.addEventListener('pointermove', (evt) => {
+    if (dragIndex === -1) return;
+    const pos = toCanvasPoint(evt);
+    points[dragIndex].y = Math.min(H - PAD, Math.max(PAD, pos.y));
+    render();
+  });
+
+  function stopDrag() {
+    dragIndex = -1;
+  }
+  canvas.addEventListener('pointerup', stopDrag);
+  canvas.addEventListener('pointercancel', stopDrag);
+
+  canvas.addEventListener('keydown', (evt) => {
+    if (dragIndex === -1) dragIndex = 0;
+    if (evt.key === 'ArrowUp') { points[dragIndex].y = Math.max(PAD, points[dragIndex].y - 8); render(); }
+    if (evt.key === 'ArrowDown') { points[dragIndex].y = Math.min(H - PAD, points[dragIndex].y + 8); render(); }
+    if (evt.key === 'Tab') return;
+    if (evt.key.startsWith('Arrow')) evt.preventDefault();
+  });
+
+  randomizeBtn.addEventListener('click', () => { makePoints(true); render(); });
+  flattenBtn.addEventListener('click', () => { makePoints(false); render(); });
+
+  makePoints(true);
+  render();
+</script>
+</body>
+</html>
