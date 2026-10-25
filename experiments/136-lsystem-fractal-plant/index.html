@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>136 — L-System Fractal Plant</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 5 / 4;
+    border-radius: 8px;
+    background: var(--bg);
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  input[type="range"] {
+    accent-color: var(--accent);
+    width: 9rem;
+  }
+
+  button {
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover { color: var(--text); }
+
+  button:focus-visible,
+  input:focus-visible,
+  canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>136 — L-System Fractal Plant</h1>
+    <p class="intro">
+      A tiny string-rewriting grammar — "X" keeps replacing itself with a
+      longer pattern of forward-steps, branches and turns — read character
+      by character by a turtle that only knows how to walk forward, turn,
+      and push/pop its position. Tap the canvas or the button to regrow it
+      with fresh random jitter.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="canvas-wrap">
+      <canvas id="plant" width="600" height="480"></canvas>
+    </div>
+    <div class="controls">
+      <div class="field">
+        <label for="iterations">Iterations</label>
+        <input type="range" id="iterations" min="1" max="5" step="1" value="4">
+      </div>
+      <div class="field">
+        <label for="angle">Angle</label>
+        <input type="range" id="angle" min="12" max="35" step="1" value="22">
+      </div>
+      <button type="button" class="ghost" id="regrow">Regrow</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <footer>
+    The grammar: axiom <code>X</code>, rules <code>X &rarr; F+[[X]-X]-F[-FX]+X</code>
+    and <code>F &rarr; FF</code>. Rewriting the string <em>iterations</em>
+    times and then walking it once produces the whole plant in one pass —
+    <code>F</code> steps the turtle forward drawing a line, <code>+</code>/<code>-</code>
+    turn it by the angle (each with a little random jitter, so no two
+    branches are quite identical), and <code>[</code>/<code>]</code> save
+    and restore its position/heading so a branch can rejoin the stem it grew
+    from. <code>X</code> itself never draws — it only exists so the rules
+    have somewhere left to keep expanding.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('plant');
+  const ctx = canvas.getContext('2d');
+  const iterationsInput = document.getElementById('iterations');
+  const angleInput = document.getElementById('angle');
+  const regrowBtn = document.getElementById('regrow');
+  const status = document.getElementById('status');
+
+  const W = canvas.width;
+  const H = canvas.height;
+
+  function expand(iterations) {
+    let str = 'X';
+    for (let i = 0; i < iterations; i++) {
+      let next = '';
+      for (const ch of str) {
+        if (ch === 'X') next += 'F+[[X]-X]-F[-FX]+X';
+        else if (ch === 'F') next += 'FF';
+        else next += ch;
+      }
+      str = next;
+    }
+    return str;
+  }
+
+  function jitterSeed() {
+    // A fresh array of per-turn jitter values (not a single global jitter)
+    // so sibling branches at the same depth still turn by slightly
+    // different amounts, instead of every "+" in the string bending by the
+    // exact same offset.
+    return Array.from({ length: 4000 }, () => (Math.random() - 0.5) * 2);
+  }
+
+  function draw() {
+    const iterations = Number(iterationsInput.value);
+    const angleDeg = Number(angleInput.value);
+    const str = expand(iterations);
+    const jitter = jitterSeed();
+
+    // Segment length shrinks as iterations grow so the whole plant keeps
+    // roughly the same height instead of outgrowing the canvas — each
+    // extra iteration doubles how many F's make up the trunk.
+    const step = (H * 0.38) / Math.pow(1.55, iterations);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = '#14b8a6';
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+
+    let x = W / 2;
+    let y = H - 16;
+    let heading = -90; // degrees, pointing straight up
+    const stack = [];
+    let jitterIndex = 0;
+
+    for (const ch of str) {
+      if (ch === 'F') {
+        const rad = (heading * Math.PI) / 180;
+        const nx = x + Math.cos(rad) * step;
+        const ny = y + Math.sin(rad) * step;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
+        x = nx;
+        y = ny;
+      } else if (ch === '+') {
+        const j = jitter[jitterIndex++ % jitter.length] * 4;
+        heading += angleDeg + j;
+      } else if (ch === '-') {
+        const j = jitter[jitterIndex++ % jitter.length] * 4;
+        heading -= angleDeg + j;
+      } else if (ch === '[') {
+        stack.push({ x, y, heading });
+      } else if (ch === ']') {
+        const s = stack.pop();
+        if (s) { x = s.x; y = s.y; heading = s.heading; }
+      }
+    }
+
+    const fCount = (str.match(/F/g) || []).length;
+    status.textContent = `${iterations} iteration${iterations === 1 ? '' : 's'} — ${str.length.toLocaleString()} symbols, ${fCount.toLocaleString()} line segments.`;
+  }
+
+  canvas.addEventListener('pointerdown', draw);
+  regrowBtn.addEventListener('click', draw);
+  iterationsInput.addEventListener('input', draw);
+  angleInput.addEventListener('input', draw);
+
+  draw();
+</script>
+</body>
+</html>
