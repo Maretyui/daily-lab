@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>137 — Langton's Ant</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    border-radius: 8px;
+    background: #000;
+    touch-action: manipulation;
+    cursor: pointer;
+    image-rendering: pixelated;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  input[type="range"] {
+    accent-color: var(--accent);
+    width: 9rem;
+  }
+
+  button {
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover { color: var(--text); }
+
+  button:focus-visible,
+  input:focus-visible,
+  canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>137 — Langton's Ant</h1>
+    <p class="intro">
+      One ant, one rule, a blank grid: on a white cell turn right and flip it
+      black, on a black cell turn left and flip it white, then step forward.
+      A few hundred steps look like noise — then, every single time, the ant
+      breaks into a diagonal "highway" that marches off forever. Tap the
+      canvas or the button to restart with a fresh seed and watch it happen
+      again.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="canvas-wrap">
+      <canvas id="grid" width="480" height="480"></canvas>
+    </div>
+    <div class="controls">
+      <div class="field">
+        <label for="speed">Steps / frame</label>
+        <input type="range" id="speed" min="1" max="400" step="1" value="40">
+      </div>
+      <button type="button" class="ghost" id="restart">Restart</button>
+      <button type="button" class="ghost" id="pause">Pause</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <footer>
+    The grid is a plain array of 0/1 cells, each pixel a cell. The ant keeps
+    an (x, y) position and a heading (up/right/down/left). Every step it
+    reads the cell it's standing on, turns <code>90°</code> left or right
+    depending on that single bit, flips the bit, and moves forward one cell
+    in its new heading. That's the entire rule — no randomness, no memory
+    beyond the grid itself — yet after roughly 10,000 steps it reliably
+    self-organizes into an open-ended diagonal path. Restarting reseeds a
+    small patch of random noise under the ant's start point so the early
+    chaotic phase looks a little different each run.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('grid');
+  const ctx = canvas.getContext('2d');
+  const speedInput = document.getElementById('speed');
+  const restartBtn = document.getElementById('restart');
+  const pauseBtn = document.getElementById('pause');
+  const status = document.getElementById('status');
+
+  const SIZE = 160; // grid cells per side
+  const CELL = canvas.width / SIZE;
+
+  let grid, ax, ay, dir, stepCount, paused, imageData;
+  // 0=up, 1=right, 2=down, 3=left
+  const DX = [0, 1, 0, -1];
+  const DY = [-1, 0, 1, 0];
+
+  function reset() {
+    grid = new Uint8Array(SIZE * SIZE);
+    // Seed a small patch of random noise so each run's early chaos differs,
+    // even though the rule itself has no randomness.
+    for (let i = 0; i < 300; i++) {
+      const rx = Math.floor(SIZE / 2 + (Math.random() - 0.5) * 20);
+      const ry = Math.floor(SIZE / 2 + (Math.random() - 0.5) * 20);
+      if (rx >= 0 && rx < SIZE && ry >= 0 && ry < SIZE) grid[ry * SIZE + rx] = 1;
+    }
+    ax = SIZE >> 1;
+    ay = SIZE >> 1;
+    dir = 0;
+    stepCount = 0;
+    imageData = ctx.createImageData(canvas.width, canvas.height);
+    paused = false;
+    pauseBtn.textContent = 'Pause';
+    render();
+  }
+
+  function step() {
+    const idx = ay * SIZE + ax;
+    if (grid[idx] === 0) {
+      dir = (dir + 1) % 4; // white: turn right
+      grid[idx] = 1;
+    } else {
+      dir = (dir + 3) % 4; // black: turn left
+      grid[idx] = 0;
+    }
+    ax += DX[dir];
+    ay += DY[dir];
+    if (ax < 0) ax = SIZE - 1;
+    if (ax >= SIZE) ax = 0;
+    if (ay < 0) ay = SIZE - 1;
+    if (ay >= SIZE) ay = 0;
+    stepCount++;
+  }
+
+  function render() {
+    const data = imageData.data;
+    for (let gy = 0; gy < SIZE; gy++) {
+      for (let gx = 0; gx < SIZE; gx++) {
+        const on = grid[gy * SIZE + gx] === 1;
+        const r = on ? 20 : 11;
+        const g = on ? 184 : 14;
+        const b = on ? 166 : 20;
+        for (let py = 0; py < CELL; py++) {
+          const rowStart = ((gy * CELL + py) * canvas.width + gx * CELL) * 4;
+          for (let px = 0; px < CELL; px++) {
+            const o = rowStart + px * 4;
+            data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
+          }
+        }
+      }
+    }
+    // Draw the ant itself in a brighter marker color.
+    const markStart = ((ay * CELL) * canvas.width + ax * CELL) * 4;
+    ctx.putImageData(imageData, 0, 0);
+    ctx.fillStyle = '#f97373';
+    ctx.fillRect(ax * CELL, ay * CELL, CELL, CELL);
+    status.textContent = `${stepCount.toLocaleString()} steps.`;
+  }
+
+  function loop() {
+    if (!paused) {
+      const n = Number(speedInput.value);
+      for (let i = 0; i < n; i++) step();
+      render();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener('pointerdown', reset);
+  restartBtn.addEventListener('click', reset);
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>
