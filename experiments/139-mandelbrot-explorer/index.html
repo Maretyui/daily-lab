@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>139 — Mandelbrot Explorer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #14b8a6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.15rem;
+    margin: 0 0 0.4rem;
+  }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .canvas-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 8 / 5;
+    border-radius: 8px;
+    background: var(--bg);
+    touch-action: none;
+    cursor: crosshair;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+
+  button {
+    background: var(--accent);
+    color: #04201c;
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  button.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.ghost:hover { color: var(--text); }
+
+  button:focus-visible,
+  canvas:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.75rem;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  footer code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">← daily-lab</a>
+<main>
+  <div>
+    <h1>139 — Mandelbrot Explorer</h1>
+    <p class="intro">
+      Tap anywhere to zoom in on that point, drag to pan, and the colors keep
+      drifting on their own between redraws. Zooming far enough keeps turning
+      up more of the same spiral and seahorse shapes at every scale.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="canvas-wrap">
+      <canvas id="field" width="640" height="400" tabindex="0"></canvas>
+    </div>
+    <div class="controls">
+      <button type="button" id="zoomOut" class="ghost">Zoom out</button>
+      <button type="button" id="reset" class="ghost">Reset</button>
+    </div>
+    <p class="status" id="status"></p>
+  </div>
+
+  <footer>
+    Every pixel of a low-resolution off-screen buffer iterates
+    <code>z = z&sup2; + c</code> starting from <code>z = 0</code>, where
+    <code>c</code> is that pixel's position on the complex plane &mdash; the
+    iteration count before <code>|z|</code> escapes past 2 (smoothed with a
+    log-of-log correction) becomes a hue. Points that never escape within the
+    iteration budget are the Mandelbrot set itself, left black. Only that
+    escape-count buffer is recomputed on tap/drag/zoom; the animation loop
+    just cycles the hue offset over the cached counts every frame, which is
+    why the colors keep moving without re-iterating anything. Iteration budget
+    scales with zoom depth so deeper views stay detailed instead of muddying
+    into flat bands.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('field');
+  const ctx = canvas.getContext('2d');
+  const zoomOutBtn = document.getElementById('zoomOut');
+  const resetBtn = document.getElementById('reset');
+  const status = document.getElementById('status');
+
+  const SCALE = 4;
+  const bufW = canvas.width / SCALE;
+  const bufH = canvas.height / SCALE;
+
+  const buffer = document.createElement('canvas');
+  buffer.width = bufW;
+  buffer.height = bufH;
+  const bufCtx = buffer.getContext('2d');
+  const imageData = bufCtx.createImageData(bufW, bufH);
+
+  const escape = new Float32Array(bufW * bufH);
+
+  const DEFAULT_CENTER_X = -0.5;
+  const DEFAULT_CENTER_Y = 0;
+  const DEFAULT_SPAN = 3.2;
+
+  let centerX = DEFAULT_CENTER_X;
+  let centerY = DEFAULT_CENTER_Y;
+  let span = DEFAULT_SPAN;
+
+  function iterationsForSpan(s) {
+    const depth = Math.log2(DEFAULT_SPAN / s);
+    return Math.min(1000, Math.round(80 + depth * 40));
+  }
+
+  function computeFractal() {
+    const maxIter = iterationsForSpan(span);
+    const pixelScale = span / bufW;
+    const left = centerX - (bufW / 2) * pixelScale;
+    const top = centerY - (bufH / 2) * pixelScale;
+
+    for (let py = 0; py < bufH; py++) {
+      const ci = top + py * pixelScale;
+      for (let px = 0; px < bufW; px++) {
+        const cr = left + px * pixelScale;
+
+        let zr = 0, zi = 0, n = 0;
+        let zr2 = 0, zi2 = 0;
+        while (zr2 + zi2 <= 4 && n < maxIter) {
+          zi = 2 * zr * zi + ci;
+          zr = zr2 - zi2 + cr;
+          zr2 = zr * zr;
+          zi2 = zi * zi;
+          n++;
+        }
+
+        let value;
+        if (n >= maxIter) {
+          value = -1;
+        } else {
+          const logZn = Math.log(zr2 + zi2) / 2;
+          const nu = Math.log(logZn / Math.LN2) / Math.LN2;
+          value = (n + 1 - nu) / maxIter;
+        }
+        escape[py * bufW + px] = value;
+      }
+    }
+
+    status.textContent = `Zoom ${(DEFAULT_SPAN / span).toFixed(1)}× — ${maxIter} iterations max. Tap to zoom in, drag to pan.`;
+  }
+
+  function colorize(hueOffset) {
+    const data = imageData.data;
+    for (let i = 0; i < escape.length; i++) {
+      const value = escape[i];
+      const o = i * 4;
+      if (value < 0) {
+        data[o] = 6; data[o + 1] = 8; data[o + 2] = 12; data[o + 3] = 255;
+      } else {
+        const hue = (value * 360 * 2.5 + hueOffset) % 360;
+        const [r, g, b] = hslToRgb(hue / 360, 0.65, 0.15 + value * 0.45);
+        data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
+      }
+    }
+    bufCtx.putImageData(imageData, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(buffer, 0, 0, bufW, bufH, 0, 0, canvas.width, canvas.height);
+  }
+
+  function hslToRgb(h, s, l) {
+    const k = n => (n + h * 12) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+  }
+
+  let hueOffset = 0;
+  function tick() {
+    hueOffset = (hueOffset + 0.4) % 360;
+    colorize(hueOffset);
+    requestAnimationFrame(tick);
+  }
+
+  function zoomAt(bufX, bufY, factor) {
+    const pixelScale = span / bufW;
+    const left = centerX - (bufW / 2) * pixelScale;
+    const top = centerY - (bufH / 2) * pixelScale;
+    centerX = left + bufX * pixelScale;
+    centerY = top + bufY * pixelScale;
+    span = Math.max(0.00005, Math.min(DEFAULT_SPAN, span * factor));
+    computeFractal();
+  }
+
+  function panBy(dBufX, dBufY) {
+    const pixelScale = span / bufW;
+    centerX -= dBufX * pixelScale;
+    centerY -= dBufY * pixelScale;
+    computeFractal();
+  }
+
+  function toBufferCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width) / SCALE;
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height) / SCALE;
+    return [x, y];
+  }
+
+  let dragStart = null;
+  let dragMoved = false;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    dragStart = toBufferCoords(e);
+    dragMoved = false;
+    canvas.setPointerCapture(e.pointerId);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragStart) return;
+    const [x, y] = toBufferCoords(e);
+    const dx = x - dragStart[0];
+    const dy = y - dragStart[1];
+    if (Math.hypot(dx, dy) > 3) {
+      dragMoved = true;
+      panBy(dx, dy);
+      dragStart = [x, y];
+    }
+  });
+
+  canvas.addEventListener('pointerup', (e) => {
+    if (dragStart && !dragMoved) {
+      const [x, y] = toBufferCoords(e);
+      zoomAt(x, y, 0.4);
+    }
+    dragStart = null;
+  });
+
+  zoomOutBtn.addEventListener('click', () => zoomAt(bufW / 2, bufH / 2, 2.5));
+  resetBtn.addEventListener('click', () => {
+    centerX = DEFAULT_CENTER_X;
+    centerY = DEFAULT_CENTER_Y;
+    span = DEFAULT_SPAN;
+    computeFractal();
+  });
+
+  computeFractal();
+  tick();
+</script>
+</body>
+</html>
