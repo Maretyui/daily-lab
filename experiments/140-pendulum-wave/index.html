@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>140 — Pendulum Wave</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #38bdf8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.15rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .stage {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 0.75rem;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    touch-action: none;
+    border-radius: 10px;
+  }
+
+  .row {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .row strong { color: var(--accent); }
+
+  button {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+    justify-self: center;
+  }
+  button:hover { border-color: var(--accent); color: var(--text); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>140 — Pendulum Wave</h1>
+  <p class="intro">
+    Fifteen pendulums released together, each a hair shorter than the last so
+    it swings a little faster. No synchronization logic — the wave, the
+    standing-still moment, and the mirrored wave are just what the phases do
+    on their own. Tap the stage to release them all again.
+  </p>
+
+  <div class="stage">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="row">
+    <span>Cycle: <strong id="cyclePct">0%</strong></span>
+    <span>Resyncs: <strong id="resyncCount">0</strong></span>
+  </div>
+
+  <button type="button" id="resetBtn">Release again</button>
+
+  <footer>
+    Pendulum <code>i</code> gets length tuned so it completes exactly
+    <code>(N + i)</code> full swings in one shared period <code>T</code> —
+    each one's angle is just <code>&theta;&middot;cos(&omega;<sub>i</sub>&middot;t)</code>.
+    Every bob starts in phase, drifts apart because the periods differ by a
+    fixed fraction, and lines back up exactly at <code>t = T</code>. No
+    per-frame coupling between pendulums at all, just N independent clocks.
+  </footer>
+</main>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const cyclePctEl = document.getElementById('cyclePct');
+  const resyncCountEl = document.getElementById('resyncCount');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const N = 15;
+  const BASE_SWINGS = 36;      // slowest pendulum completes this many swings per cycle
+  const CYCLE_SECONDS = 24;    // time for all pendulums to realign
+  const AMPLITUDE = 0.65;      // radians, starting pull angle
+
+  const pendulums = [];
+  for (let i = 0; i < N; i++) {
+    const swings = BASE_SWINGS + i;
+    pendulums.push({ omega: (2 * Math.PI * swings) / CYCLE_SECONDS });
+  }
+
+  let anchorY = 36;
+  let maxLen = 240;
+  let spacing = 30;
+  let bobRadius = 10;
+  let startTime = performance.now();
+  let resyncs = 0;
+
+  function layout() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const width = Math.round(rect.width - 24);
+    const height = Math.round(width * 0.82);
+    canvas.width = width;
+    canvas.height = height;
+
+    anchorY = Math.max(28, height * 0.08);
+    maxLen = height - anchorY - 24;
+    spacing = width / (N + 1);
+    bobRadius = Math.min(10, spacing * 0.38);
+  }
+
+  function draw(now) {
+    const width = canvas.width;
+    const height = canvas.height;
+    const t = (now - startTime) / 1000;
+    const cyclePos = (t % CYCLE_SECONDS) / CYCLE_SECONDS;
+    cyclePctEl.textContent = Math.round(cyclePos * 100) + '%';
+
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.strokeStyle = '#2a3245';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(spacing * 0.4, anchorY - 10);
+    ctx.lineTo(width - spacing * 0.4, anchorY - 10);
+    ctx.stroke();
+
+    for (let i = 0; i < N; i++) {
+      const p = pendulums[i];
+      const anchorX = spacing * (i + 1);
+      // shorter pendulums (higher i) hang a touch higher up so the rows
+      // of bobs fan out instead of all bottoming out at the same depth
+      const len = maxLen * (1 - i * 0.012);
+      const theta = AMPLITUDE * Math.cos(p.omega * t);
+      const x = anchorX + Math.sin(theta) * len;
+      const y = anchorY + Math.cos(theta) * len;
+
+      ctx.strokeStyle = '#3a445c';
+      ctx.lineWidth = 1.25;
+      ctx.beginPath();
+      ctx.moveTo(anchorX, anchorY - 10);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      const hue = 195 + (i / N) * 60;
+      ctx.fillStyle = `hsl(${hue}, 85%, 62%)`;
+      ctx.beginPath();
+      ctx.arc(x, y, bobRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function reset() {
+    startTime = performance.now();
+    resyncs++;
+    resyncCountEl.textContent = resyncs;
+  }
+  resetBtn.addEventListener('click', reset);
+  canvas.addEventListener('pointerdown', reset);
+
+  function frame(now) {
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', layout);
+  layout();
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
