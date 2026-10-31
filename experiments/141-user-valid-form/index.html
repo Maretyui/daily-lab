@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>141 — :user-valid Form Feedback</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #38bdf8;
+    --bad: #f87171;
+    --good: #4ade80;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { margin: 0; font-size: 1.15rem; text-align: center; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+    text-align: center;
+  }
+
+  .toggle-row {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .toggle-row button {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .toggle-row button[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.25rem;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .field {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  label {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  input {
+    width: 100%;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 0.65rem 0.75rem;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.95rem;
+  }
+
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .hint {
+    font-size: 0.78rem;
+    color: var(--muted);
+    min-height: 1.1em;
+  }
+
+  /* Mode A: the common default — :invalid matches a required empty
+     field the instant it exists, before the user has touched anything. */
+  form.mode-immediate input:invalid {
+    border-color: var(--bad);
+  }
+  form.mode-immediate input:invalid ~ .hint {
+    color: var(--bad);
+  }
+
+  /* Mode B: :user-invalid only matches after the user has interacted
+     with the field (typed, then blurred, roughly) and it's still invalid. */
+  form.mode-user input:user-invalid {
+    border-color: var(--bad);
+  }
+  form.mode-user input:user-invalid ~ .hint {
+    color: var(--bad);
+  }
+
+  form input:valid:not(:placeholder-shown) {
+    border-color: var(--good);
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>141 — :user-valid Form Feedback</h1>
+  <p class="intro">
+    Same untouched form, same required fields, two CSS rules. Switch the
+    mode below and watch the red borders appear at a completely different
+    moment, with zero JavaScript involved in the decision.
+  </p>
+
+  <div class="toggle-row">
+    <button type="button" id="modeImmediateBtn" aria-pressed="true">:invalid</button>
+    <button type="button" id="modeUserBtn" aria-pressed="false">:user-invalid</button>
+  </div>
+
+  <form class="card mode-immediate" id="demoForm" novalidate>
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" required placeholder=" ">
+      <span class="hint">Required, must look like an email</span>
+    </div>
+    <div class="field">
+      <label for="code">Invite code</label>
+      <input type="text" id="code" required minlength="4" placeholder=" ">
+      <span class="hint">Required, at least 4 characters</span>
+    </div>
+    <div class="field">
+      <label for="age">Age</label>
+      <input type="number" id="age" required min="13" max="120" placeholder=" ">
+      <span class="hint">Required, 13–120</span>
+    </div>
+  </form>
+
+  <footer>
+    In <code>:invalid</code> mode every required field lights up red
+    before you've clicked anything at all, just because the page loaded
+    with them empty. Switching to <code>:user-invalid</code> keeps them
+    neutral until you actually type into one and leave it wrong — the
+    browser tracks "has this field been interacted with" entirely on its
+    own, no input/blur listeners written here.
+  </footer>
+</main>
+
+<script>
+  const form = document.getElementById('demoForm');
+  const immediateBtn = document.getElementById('modeImmediateBtn');
+  const userBtn = document.getElementById('modeUserBtn');
+
+  function setMode(mode) {
+    form.classList.toggle('mode-immediate', mode === 'immediate');
+    form.classList.toggle('mode-user', mode === 'user');
+    immediateBtn.setAttribute('aria-pressed', String(mode === 'immediate'));
+    userBtn.setAttribute('aria-pressed', String(mode === 'user'));
+  }
+
+  immediateBtn.addEventListener('click', () => setMode('immediate'));
+  userBtn.addEventListener('click', () => setMode('user'));
+</script>
+</body>
+</html>
