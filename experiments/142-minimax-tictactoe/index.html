@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>142 — Unbeatable Tic-Tac-Toe</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #38bdf8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    text-align: center;
+  }
+
+  h1 { margin: 0; font-size: 1.15rem; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .status {
+    font-size: 0.95rem;
+    min-height: 1.4em;
+  }
+  .status strong { color: var(--accent); }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.6rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 0.75rem;
+  }
+
+  .cell {
+    aspect-ratio: 1 / 1;
+    width: 100%;
+    background: #10151f;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: clamp(1.6rem, 10vw, 2.4rem);
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    touch-action: manipulation;
+    padding: 0;
+  }
+  .cell:disabled { cursor: default; }
+  .cell.x { color: var(--accent); }
+  .cell.o { color: #f472b6; }
+  .cell.win { border-color: var(--accent); background: #142232; }
+
+  .row {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .row strong { color: var(--text); }
+
+  button.reset {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+    justify-self: center;
+  }
+  button.reset:hover { border-color: var(--accent); color: var(--text); }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>142 — Unbeatable Tic-Tac-Toe</h1>
+  <p class="intro">
+    You're X, the board plays O, and it never loses. Every move it makes is
+    the output of a full minimax search of the remaining game tree — there's
+    no heuristic, no opening book, just recursion scoring every line to its
+    end and picking the one that can't go worse than a draw.
+  </p>
+
+  <div class="status" id="status">Your move.</div>
+
+  <div class="board" id="board"></div>
+
+  <div class="row">
+    <span>Wins: <strong id="winCount">0</strong></span>
+    <span>Draws: <strong id="drawCount">0</strong></span>
+    <span>Losses: <strong id="lossCount">0</strong></span>
+  </div>
+
+  <button type="button" class="reset" id="resetBtn">New game</button>
+
+  <footer>
+    Minimax assumes O always picks the move that minimizes X's best possible
+    outcome, and X (simulated inside the search) always maximizes it —
+    recursing to every terminal board state gives O perfect play. On this
+    small a tree (at most 9! positions, far fewer after pruning wins) it
+    runs instantly with no alpha-beta pruning needed.
+  </footer>
+</main>
+
+<script>
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const winCountEl = document.getElementById('winCount');
+  const drawCountEl = document.getElementById('drawCount');
+  const lossCountEl = document.getElementById('lossCount');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  let board = Array(9).fill(null);
+  let over = false;
+  let stats = { win: 0, draw: 0, loss: 0 };
+  let cells = [];
+
+  function buildBoard() {
+    boardEl.innerHTML = '';
+    cells = [];
+    for (let i = 0; i < 9; i++) {
+      const btn = document.createElement('button');
+      btn.className = 'cell';
+      btn.type = 'button';
+      btn.dataset.index = i;
+      btn.addEventListener('click', () => handleMove(i));
+      boardEl.appendChild(btn);
+      cells.push(btn);
+    }
+  }
+
+  function winner(b) {
+    for (const line of LINES) {
+      const [a, c, d] = line;
+      if (b[a] && b[a] === b[c] && b[a] === b[d]) return { mark: b[a], line };
+    }
+    if (b.every(Boolean)) return { mark: 'draw', line: null };
+    return null;
+  }
+
+  function minimax(b, player) {
+    const result = winner(b);
+    if (result) {
+      if (result.mark === 'draw') return { score: 0 };
+      return { score: result.mark === 'O' ? 1 : -1 };
+    }
+    const scores = [];
+    for (let i = 0; i < 9; i++) {
+      if (b[i]) continue;
+      b[i] = player;
+      const { score } = minimax(b, player === 'O' ? 'X' : 'O');
+      scores.push({ index: i, score });
+      b[i] = null;
+    }
+    const best = player === 'O'
+      ? scores.reduce((a, c) => c.score > a.score ? c : a)
+      : scores.reduce((a, c) => c.score < a.score ? c : a);
+    return best;
+  }
+
+  function render(result) {
+    for (let i = 0; i < 9; i++) {
+      const cell = cells[i];
+      cell.textContent = board[i] || '';
+      cell.classList.toggle('x', board[i] === 'X');
+      cell.classList.toggle('o', board[i] === 'O');
+      cell.classList.toggle('win', !!(result && result.line && result.line.includes(i)));
+      cell.disabled = over || !!board[i];
+    }
+  }
+
+  function finish(result) {
+    over = true;
+    if (result.mark === 'draw') {
+      stats.draw++;
+      statusEl.innerHTML = "Draw. Best it ever does against itself.";
+    } else if (result.mark === 'X') {
+      stats.win++;
+      statusEl.innerHTML = 'You won — minimax has a bug, screenshot this.';
+    } else {
+      stats.loss++;
+      statusEl.innerHTML = 'O takes it.';
+    }
+    winCountEl.textContent = stats.win;
+    drawCountEl.textContent = stats.draw;
+    lossCountEl.textContent = stats.loss;
+  }
+
+  function handleMove(i) {
+    if (over || board[i]) return;
+    board[i] = 'X';
+    let result = winner(board);
+    if (result) { render(result); finish(result); return; }
+
+    render(null);
+    statusEl.textContent = "O is thinking...";
+
+    setTimeout(() => {
+      const { index } = minimax(board, 'O');
+      board[index] = 'O';
+      result = winner(board);
+      render(result);
+      if (result) {
+        finish(result);
+      } else {
+        statusEl.textContent = 'Your move.';
+      }
+    }, 150);
+  }
+
+  function reset() {
+    board = Array(9).fill(null);
+    over = false;
+    statusEl.textContent = 'Your move.';
+    render(null);
+  }
+  resetBtn.addEventListener('click', reset);
+
+  buildBoard();
+  render(null);
+</script>
+</body>
+</html>
