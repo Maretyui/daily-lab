@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>144 — Two-Axis Sticky Table</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --head: #1b2230;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #38bdf8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 10;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { margin: 0; font-size: 1.15rem; text-align: center; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+    text-align: center;
+  }
+
+  .toggle-row {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .toggle-row button {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .toggle-row button[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  /* The scroll container is what sticky positions resolve against - not the
+     viewport. Both axes scroll here, so both axes can have sticky cells.
+     max-width keeps the page itself free of horizontal overflow on a phone. */
+  .scroller {
+    max-width: 100%;
+    overflow: auto;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    max-height: 60vh;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  th, td {
+    padding: 0.6rem 0.85rem;
+    text-align: right;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+  }
+
+  thead th {
+    text-align: right;
+    color: var(--muted);
+    font-weight: 600;
+    background: var(--head);
+  }
+
+  /* Row label column: first cell of every row, left-aligned. */
+  tbody th {
+    text-align: left;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  thead th:first-child {
+    text-align: left;
+  }
+
+  /* --- the actual technique ---------------------------------------- */
+
+  /* Column headers stick to the top of the scroller. */
+  .sticky-y thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  /* Row headers stick to the left edge of the scroller. */
+  .sticky-x tbody th,
+  .sticky-x thead th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+
+  /* The corner cell is sticky on BOTH axes at once, so it has to outrank
+     the two header bands it overlaps - otherwise it slides under them and
+     the labels smear together. This is the bit that is easy to miss. */
+  .sticky-x.sticky-y thead th:first-child {
+    z-index: 3;
+  }
+
+  /* Separators drawn as box-shadows rather than borders: a border on a
+     sticky cell scrolls away with the cell's own box in some engines,
+     the shadow always hugs the frozen edge. */
+  .sticky-y thead th {
+    box-shadow: inset 0 -1px 0 var(--border);
+  }
+  .sticky-x tbody th,
+  .sticky-x thead th:first-child {
+    box-shadow: inset -1px 0 0 var(--border);
+  }
+  .sticky-x.sticky-y thead th:first-child {
+    box-shadow: inset -1px -1px 0 var(--border);
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>144 — Two-Axis Sticky Table</h1>
+  <p class="intro">
+    Scroll the grid below in both directions. Toggle each axis off to see
+    which labels you lose track of first — no JavaScript keeps anything in
+    place, it is four <code>position: sticky</code> rules and a z-index
+    order.
+  </p>
+
+  <div class="toggle-row">
+    <button type="button" id="yBtn" aria-pressed="true">Freeze header row</button>
+    <button type="button" id="xBtn" aria-pressed="true">Freeze label column</button>
+  </div>
+
+  <div class="scroller">
+    <table class="sticky-x sticky-y" id="grid">
+      <thead>
+        <tr id="headRow"></tr>
+      </thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    <p>
+      <code>position: sticky</code> resolves against the nearest scrollable
+      ancestor, so putting the overflow on a wrapper instead of the page is
+      what makes a frozen header possible at all — and keeps a wide table
+      from pushing the whole document sideways on a phone.
+    </p>
+    <p>
+      The corner cell is the interesting case: it is sticky on both axes
+      simultaneously and overlaps both frozen bands, so it needs a higher
+      <code>z-index</code> than either. Leave that out and it scrolls
+      underneath the row labels, stacking two pieces of text on top of each
+      other. The dividing lines are <code>inset</code> box-shadows rather
+      than borders, because a collapsed border belongs to the table grid
+      rather than the frozen cell and detaches from it mid-scroll.
+    </p>
+  </footer>
+</main>
+
+<script>
+  const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
+  const YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+  const REGIONS = [
+    'North', 'South', 'East', 'West', 'Central',
+    'Coastal', 'Highland', 'Lakeside', 'Riverside', 'Borderlands',
+    'Uplands', 'Lowlands'
+  ];
+
+  const headRow = document.getElementById('headRow');
+  const body = document.getElementById('body');
+
+  // A deterministic pseudo-random fill, so the numbers look like data
+  // instead of noise but never shift between reloads.
+  function value(row, col) {
+    const seed = (row * 73 + col * 151) % 997;
+    return 40 + (seed % 360);
+  }
+
+  const columns = [];
+  for (const year of YEARS) {
+    for (const q of QUARTERS) {
+      columns.push(q + ' ' + year);
+    }
+  }
+
+  const corner = document.createElement('th');
+  corner.scope = 'col';
+  corner.textContent = 'Region';
+  headRow.appendChild(corner);
+
+  for (const label of columns) {
+    const th = document.createElement('th');
+    th.scope = 'col';
+    th.textContent = label;
+    headRow.appendChild(th);
+  }
+
+  REGIONS.forEach((region, r) => {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.scope = 'row';
+    th.textContent = region;
+    tr.appendChild(th);
+
+    columns.forEach((_, c) => {
+      const td = document.createElement('td');
+      td.textContent = value(r, c).toLocaleString('en-US');
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+
+  const grid = document.getElementById('grid');
+  const yBtn = document.getElementById('yBtn');
+  const xBtn = document.getElementById('xBtn');
+
+  function wire(btn, cls) {
+    btn.addEventListener('click', () => {
+      const on = !grid.classList.contains(cls);
+      grid.classList.toggle(cls, on);
+      btn.setAttribute('aria-pressed', String(on));
+    });
+  }
+
+  wire(yBtn, 'sticky-y');
+  wire(xBtn, 'sticky-x');
+</script>
+</body>
+</html>
