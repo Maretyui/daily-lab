@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>145 — LCS Word Diff</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --card: #151a24;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --border: #1f2530;
+    --accent: #38bdf8;
+    --add-bg: #14532d;
+    --add-fg: #86efac;
+    --del-bg: #4c1d24;
+    --del-fg: #fca5a5;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a.back {
+    position: fixed;
+    top: 1.25rem;
+    right: 1.25rem;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    z-index: 10;
+  }
+  a.back:hover { color: var(--accent); }
+
+  main {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 3rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  h1 { margin: 0; font-size: 1.15rem; text-align: center; }
+
+  p.intro {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0;
+    text-align: center;
+  }
+
+  .inputs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  @media (min-width: 540px) {
+    .inputs {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+
+  .field {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  label {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 7.5rem;
+    resize: vertical;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .result {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    line-height: 1.75;
+    font-size: 0.92rem;
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+
+  .result ins {
+    background: var(--add-bg);
+    color: var(--add-fg);
+    text-decoration: none;
+    border-radius: 3px;
+    padding: 0.05em 0.2em;
+  }
+
+  .result del {
+    background: var(--del-bg);
+    color: var(--del-fg);
+    border-radius: 3px;
+    padding: 0.05em 0.2em;
+  }
+
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats b { color: var(--text); font-weight: 600; }
+
+  .notice {
+    font-size: 0.78rem;
+    color: var(--del-fg);
+    min-height: 1.1em;
+  }
+
+  footer {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.85em;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="../../index.html">&larr; daily-lab</a>
+<main>
+  <h1>145 — LCS Word Diff</h1>
+  <p class="intro">
+    Edit either side and the comparison below rebuilds as you type. Nothing
+    is guessed line by line — the longest common subsequence of the two word
+    lists decides what counts as kept, and everything off that path is an
+    insertion or a deletion.
+  </p>
+
+  <div class="inputs">
+    <div class="field">
+      <label for="left">Original</label>
+      <textarea id="left" spellcheck="false"></textarea>
+    </div>
+    <div class="field">
+      <label for="right">Revised</label>
+      <textarea id="right" spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <p class="notice" id="notice"></p>
+  <div class="result" id="result" aria-live="polite"></div>
+
+  <footer>
+    <p>
+      Splitting on whitespace turns both texts into token lists, and a
+      classic <code>(n+1) &times; (m+1)</code> dynamic-programming table
+      fills in the length of the longest common subsequence of every pair of
+      prefixes. Walking that table backwards from the bottom-right corner
+      replays the single alignment it found: diagonal steps are words both
+      versions share, sideways steps are words only one of them has.
+    </p>
+    <p>
+      Word-level rather than line-level is what makes a reworded sentence
+      readable — a line differ would mark the whole paragraph as replaced,
+      because every character after the first edit sits on a changed line.
+      The table is quadratic in token count, so input here is capped; real
+      differs switch to Myers' algorithm, which walks the edit graph's
+      diagonals instead of filling the whole grid.
+    </p>
+  </footer>
+</main>
+
+<script>
+  const MAX_TOKENS = 400;
+
+  const left = document.getElementById('left');
+  const right = document.getElementById('right');
+  const result = document.getElementById('result');
+  const stats = document.getElementById('stats');
+  const notice = document.getElementById('notice');
+
+  left.value = 'The swim course meets every Tuesday at six in the evening. ' +
+    'Bring a towel, goggles and a locker coin. Beginners are welcome and ' +
+    'no registration is needed for the first session.';
+
+  right.value = 'The swim course meets every Thursday at seven in the ' +
+    'evening. Bring a towel and goggles. Beginners are very welcome, but ' +
+    'registration is needed for the first session.';
+
+  // Keep the separators so the rebuilt text still reads like prose rather
+  // than a word list collapsed onto single spaces.
+  function tokenize(text) {
+    const raw = text.split(/(\s+)/);
+    const out = [];
+    for (const piece of raw) {
+      if (piece !== '') out.push(piece);
+    }
+    return out;
+  }
+
+  function isSpace(token) {
+    return /^\s+$/.test(token);
+  }
+
+  // Standard LCS length table over the two token lists.
+  function lcsTable(a, b) {
+    const rows = a.length + 1;
+    const cols = b.length + 1;
+    const table = new Uint16Array(rows * cols);
+
+    for (let i = a.length - 1; i >= 0; i--) {
+      for (let j = b.length - 1; j >= 0; j--) {
+        const here = i * cols + j;
+        if (a[i] === b[j]) {
+          table[here] = table[(i + 1) * cols + (j + 1)] + 1;
+        } else {
+          const down = table[(i + 1) * cols + j];
+          const across = table[here + 1];
+          table[here] = down >= across ? down : across;
+        }
+      }
+    }
+
+    return { table: table, cols: cols };
+  }
+
+  // Walk the table forwards from (0, 0), emitting one operation per step.
+  function diff(a, b) {
+    const built = lcsTable(a, b);
+    const table = built.table;
+    const cols = built.cols;
+
+    const ops = [];
+    let i = 0;
+    let j = 0;
+
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) {
+        ops.push({ type: 'same', text: a[i] });
+        i++;
+        j++;
+      } else if (table[(i + 1) * cols + j] >= table[i * cols + (j + 1)]) {
+        ops.push({ type: 'del', text: a[i] });
+        i++;
+      } else {
+        ops.push({ type: 'add', text: b[j] });
+        j++;
+      }
+    }
+
+    while (i < a.length) ops.push({ type: 'del', text: a[i++] });
+    while (j < b.length) ops.push({ type: 'add', text: b[j++] });
+
+    return ops;
+  }
+
+  function render() {
+    let a = tokenize(left.value);
+    let b = tokenize(right.value);
+
+    const over = a.length > MAX_TOKENS || b.length > MAX_TOKENS;
+    if (over) {
+      a = a.slice(0, MAX_TOKENS);
+      b = b.slice(0, MAX_TOKENS);
+      notice.textContent = 'Input capped at ' + MAX_TOKENS +
+        ' tokens per side to keep the table small.';
+    } else {
+      notice.textContent = '';
+    }
+
+    const ops = diff(a, b);
+
+    result.textContent = '';
+    let kept = 0;
+    let added = 0;
+    let removed = 0;
+
+    for (const op of ops) {
+      const whitespace = isSpace(op.text);
+
+      if (op.type === 'same') {
+        if (!whitespace) kept++;
+        result.appendChild(document.createTextNode(op.text));
+        continue;
+      }
+
+      if (op.type === 'add') {
+        if (!whitespace) added++;
+      } else if (!whitespace) {
+        removed++;
+      }
+
+      // A changed run of pure whitespace would render as an empty colored
+      // box, so it is carried through unmarked.
+      if (whitespace) {
+        result.appendChild(document.createTextNode(op.text));
+        continue;
+      }
+
+      const el = document.createElement(op.type === 'add' ? 'ins' : 'del');
+      el.textContent = op.text;
+      result.appendChild(el);
+    }
+
+    stats.textContent = '';
+    const parts = [
+      ['kept', kept],
+      ['added', added],
+      ['removed', removed]
+    ];
+
+    for (const pair of parts) {
+      const span = document.createElement('span');
+      const strong = document.createElement('b');
+      strong.textContent = String(pair[1]);
+      span.appendChild(strong);
+      span.appendChild(document.createTextNode(' ' + pair[0]));
+      stats.appendChild(span);
+    }
+  }
+
+  let pending = 0;
+  function schedule() {
+    clearTimeout(pending);
+    pending = setTimeout(render, 90);
+  }
+
+  left.addEventListener('input', schedule);
+  right.addEventListener('input', schedule);
+  render();
+</script>
+</body>
+</html>
